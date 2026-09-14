@@ -4,6 +4,9 @@ import slicer
 import qt
 import numpy as np
 import datetime
+import os
+import urllib.request
+import tempfile
 
 # --- Final Ridel GUI with parenting and parsing fix ---
 class RidelGUI:
@@ -24,6 +27,10 @@ class RidelGUI:
         inputs_group1 = qt.QGroupBox("Inputs"); inputs_layout1 = qt.QFormLayout(inputs_group1)
         self.hard_tissue_selector = self.create_node_selector("Hard Tissue Fiducials:", "vtkMRMLMarkupsFiducialNode", "Ridel_hard_tissue")
         inputs_layout1.addRow(self.hard_tissue_selector['label'], self.hard_tissue_selector['selector'])
+        # --- NEW: Download button for hard tissue landmarks ---
+        self.download_hard_btn = qt.QPushButton("Download Hard Tissue Landmarks (.mrk.json)")
+        self.download_hard_btn.clicked.connect(self.download_hard_tissue)
+        inputs_layout1.addRow("", self.download_hard_btn)
         self.fhp_plane_selector = self.create_node_selector("FHP Plane:", "vtkMRMLMarkupsPlaneNode", "FHP")
         inputs_layout1.addRow(self.fhp_plane_selector['label'], self.fhp_plane_selector['selector'])
         stage1_layout.addWidget(inputs_group1)
@@ -40,6 +47,10 @@ class RidelGUI:
         inputs_group2 = qt.QGroupBox("Input"); inputs_layout2 = qt.QFormLayout(inputs_group2)
         self.soft_tissue_selector = self.create_node_selector("True Soft Tissue Fiducials:", "vtkMRMLMarkupsFiducialNode", "Ridel_soft_tissue")
         inputs_layout2.addRow(self.soft_tissue_selector['label'], self.soft_tissue_selector['selector'])
+        # --- NEW: Download button for soft tissue landmarks ---
+        self.download_soft_btn = qt.QPushButton("Download Soft Tissue Landmarks (.mrk.json)")
+        self.download_soft_btn.clicked.connect(self.download_soft_tissue)
+        inputs_layout2.addRow("", self.download_soft_btn)
         stage2_layout.addWidget(inputs_group2)
         workflow_group2 = self.create_step_group("Comparison Workflow"); workflow_layout2 = workflow_group2.layout()
         self.add_workflow_step(workflow_layout2, "<b>Step 5: Measure Prediction Errors</b>", "Measure distances between predicted and true soft tissue landmarks.", self.measure_prediction_errors)
@@ -50,6 +61,52 @@ class RidelGUI:
         self.main_widget.show()
         self.prediction_dialog = None
         self.detailedWidget = None
+
+    # --- NEW: Helper method to download and load a markups file from a URL ---
+    def _download_and_load_markups(self, url, selector_dict, friendly_name):
+        """Download a .mrk.json file from a URL, load it into Slicer,
+        and select it in the given node selector."""
+        try:
+            # Create a temporary file path with a meaningful name
+            temp_dir = tempfile.gettempdir()
+            filename = os.path.basename(url.split("?")[0])  # strip query params
+            filepath = os.path.join(temp_dir, filename)
+
+            # Download the file
+            slicer.util.showStatusMessage(f"Downloading {friendly_name}...", 3000)
+            urllib.request.urlretrieve(url, filepath)
+
+            # Remove any existing node with the same name to avoid duplicates
+            existing = slicer.mrmlScene.GetFirstNodeByName(friendly_name)
+            if existing:
+                slicer.mrmlScene.RemoveNode(existing)
+
+            # Load the markups file into the scene
+            loaded_node = slicer.util.loadMarkups(filepath)
+            if not loaded_node:
+                slicer.util.errorDisplay(f"Failed to load {friendly_name} from {filepath}")
+                return
+
+            # Rename the loaded node to the friendly name if it differs
+            if loaded_node.GetName() != friendly_name:
+                loaded_node.SetName(friendly_name)
+
+            # Select the loaded node in the provided selector
+            selector_dict['selector'].setCurrentNode(loaded_node)
+
+            slicer.util.showStatusMessage(f"{friendly_name} loaded successfully.", 3000)
+        except Exception as e:
+            slicer.util.errorDisplay(f"Error downloading/loading {friendly_name}:\n{str(e)}")
+
+    # --- NEW: Callback for the hard tissue download button ---
+    def download_hard_tissue(self):
+        url = "https://github.com/user-attachments/files/20970624/Ridel_hard_tissue.mrk.json"
+        self._download_and_load_markups(url, self.hard_tissue_selector, "Ridel_hard_tissue")
+
+    # --- NEW: Callback for the soft tissue download button ---
+    def download_soft_tissue(self):
+        url = "https://github.com/user-attachments/files/20970625/Ridel_soft_tissue.mrk.json"
+        self._download_and_load_markups(url, self.soft_tissue_selector, "Ridel_soft_tissue")
 
     def create_stage_group(self, title):
         g = qt.QGroupBox(title); g.setStyleSheet("QGroupBox { font-size: 16px; font-weight: bold; }"); g.setLayout(qt.QVBoxLayout()); return g
@@ -125,14 +182,14 @@ class RidelGUI:
         if np.linalg.norm(d) > 1e-6: d /= np.linalg.norm(d)
         else: return
         ln = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsLineNode", line_name); ln.AddControlPoint(pt - d*100); ln.AddControlPoint(pt + d*100); ln.GetDisplayNode().SetVisibility(False)
-    
+
     def launch_prediction_dialog(self):
         needed = ["Nasal height","Nasal bone length","Nasal bone projection","nTr_line","nCor_line","Ridel_hard_tissue"]
         if any(not slicer.mrmlScene.GetFirstNodeByName(n) for n in needed): slicer.util.errorDisplay("Run Steps 1-3 first."); return
-        if not self.prediction_dialog: 
+        if not self.prediction_dialog:
             self.prediction_dialog = PredictionDialog(self.main_widget)
         self.prediction_dialog.refresh_measurements(); self.prediction_dialog.show(); self.prediction_dialog.raise_()
-    
+
     def measure_prediction_errors(self):
         soft = self.get_node(self.soft_tissue_selector, "True Soft Tissue Fiducials")
         if not soft: return
@@ -165,16 +222,16 @@ class RidelGUI:
         layout = qt.QVBoxLayout(self.detailedWidget); table = qt.QTableWidget()
         headers = ["Prediction Set", "Original Landmark", "Predicted Landmark Name", "nTr Calc: HT Measurements", "nTr Calc: Equation", "nTr Calc: Value (mm)", "nCor Calc: HT Measurements", "nCor Calc: Equation", "nCor Calc: Value (mm)", "Ancestry in Equation", "Final Error (mm)"]
         table.setColumnCount(len(headers)); table.setHorizontalHeaderLabels(headers)
-        
+
         true_map = {"pn'":"Pn_", "sn'":"Sn_", "al'l":"AlL_", "al'r":"AlR_"}; true_dict = {}
         if soft_node:
             for i in range(soft_node.GetNumberOfControlPoints()):
                 label = soft_node.GetNthControlPointLabel(i).lower().replace(" ","")
                 for key, prefix in true_map.items():
                     if key in label: pos = np.zeros(3); soft_node.GetNthControlPointPosition(i, pos); true_dict[prefix] = pos; break
-        
+
         all_equations = self.prediction_dialog.get_equations()
-        
+
         table.setRowCount(sum(node.GetNumberOfControlPoints() for node in pred_nodes)); current_row = 0
         for pred_node in pred_nodes:
             for i in range(pred_node.GetNumberOfControlPoints()):
@@ -196,15 +253,15 @@ class RidelGUI:
         table.resizeColumnsToContents(); table.resizeRowsToContents(); layout.addWidget(table)
         copy_button = qt.QPushButton("Copy Table to Clipboard"); copy_button.clicked.connect(lambda: self.onCopyToClipboard(table)); layout.addWidget(copy_button)
         self.detailedWidget.show()
-    
+
     # --- THE FIX IS HERE: REWRITTEN PARSING LOGIC ---
     def get_calculation_breakdown(self, label, all_equations):
         parts = label.split('_')
         lm_part, eq_parts = parts[0], parts[1:]
-        
+
         lm_map = {"Pn": "pronasale", "Sn": "subnasale", "AlL": "alare (left)", "AlR": "alare (right)"}
         original_lm = lm_map.get(lm_part, "Unknown")
-        
+
         # This is the corrected logic to reconstruct codes from the name parts
         eq_codes = []
         if len(eq_parts) > 0:
@@ -220,18 +277,18 @@ class RidelGUI:
         pop_map = {"BSA": "Black South African", "WSA": "White South African"}
         if eq_codes and eq_codes[0].startswith("BSA"): ancestry = pop_map["BSA"]
         if eq_codes and eq_codes[0].startswith("WSA"): ancestry = pop_map["WSA"]
-        
+
         def get_breakdown_for_eq(eq_code):
             breakdown = {'eq': "N/A", 'vars': "N/A", 'val': "N/A"}
             if self.prediction_dialog and eq_code and eq_code in all_equations:
                 eq_text = all_equations[eq_code]['text']
                 breakdown['eq'] = eq_text
-                
+
                 used_vars = []; var_map = {"NH": "Nasal height", "NBL": "Nasal bone length", "NBP": "Nasal bone projection"}
                 for var_code, var_name in var_map.items():
                     if var_code in eq_text: used_vars.append(var_name)
                 breakdown['vars'] = "; ".join(used_vars) if used_vars else "Constant"
-                
+
                 measurements = self.prediction_dialog.measurements
                 formula = eq_text.replace('−','-').replace('×','*')
                 is_calculable = True
@@ -240,7 +297,7 @@ class RidelGUI:
                         value = measurements.get(var_name)
                         if value is None: is_calculable = False; break
                         formula = formula.replace(var_text, str(value))
-                
+
                 if is_calculable:
                     try:
                         value = eval(formula, {"__builtins__": {}})
@@ -249,13 +306,13 @@ class RidelGUI:
                 else:
                     breakdown['val'] = "Missing HT"
             return breakdown
-        
+
         ntr_code = eq_codes[0] if len(eq_codes) > 0 else None
         ncor_code = eq_codes[1] if len(eq_codes) > 1 else None
-        
+
         ntr_breakdown = get_breakdown_for_eq(ntr_code)
         ncor_breakdown = get_breakdown_for_eq(ncor_code)
-        
+
         return original_lm, ancestry, ntr_breakdown, ncor_breakdown
 
     def onCopyToClipboard(self, table_widget):
@@ -266,7 +323,7 @@ class RidelGUI:
             text += "\t".join([table_widget.item(row, col).text().replace('\n', ' | ') if table_widget.item(row, col) else "" for col in range(table_widget.columnCount)]) + "\n"
         clipboard.setText(text)
         slicer.util.showStatusMessage("Table contents copied to clipboard.", 3000)
-    
+
     def close_all_dialogs(self):
         if self.detailedWidget and self.detailedWidget.isWidgetType(): self.detailedWidget.close()
         if self.prediction_dialog and self.prediction_dialog.isWidgetType():
@@ -299,7 +356,7 @@ class PredictionDialog(qt.QDialog):
             if node and isinstance(node, slicer.vtkMRMLMarkupsLineNode): val = node.GetMeasurement('length').GetValue(); self.measurements[n] = val; self.meas_layout.addRow(n, qt.QLabel(f"{val:.2f} mm"))
             else: self.measurements[n] = None; ok = False; l = qt.QLabel("NOT FOUND"); l.setStyleSheet("color: red"); self.meas_layout.addRow(n, l)
         self.create_btn.setEnabled(ok)
-    
+
     def update_equations(self):
         is_bsa = (self.pop_combo.currentText == "Black South African"); eqs = self.get_equations()
         def fill(combo, keys):
@@ -310,7 +367,7 @@ class PredictionDialog(qt.QDialog):
         fill(self.pn_combo1, ["BSA_nh"] if is_bsa else ["WSA_nh","WSA_nbl","WSA_nh+nbl"]); fill(self.pn_combo2, ["BSA_nbl"] if is_bsa else ["WSA_nbp"])
         fill(self.sn_combo1, ["BSA_nh","BSA_nbl","BSA_nh+nbl"] if is_bsa else ["WSA_nh","WSA_nbl","WSA_nh+nbl"]); fill(self.sn_combo2, ["BSA_nbp"] if is_bsa else ["WSA_nbp"])
         fill(self.al_combo1, ["BSA_nh","BSA_nbl","BSA_nh+nbl"] if is_bsa else ["WSA_nh","WSA_nbl","WSA_nh+nbl"])
-    
+
     def create_prediction_set(self):
         name = self.name_edit.text.strip()
         if not name or not name.startswith("Pred_"): slicer.util.errorDisplay("Name must start with 'Pred_'."); return
@@ -323,7 +380,7 @@ class PredictionDialog(qt.QDialog):
             if group.isChecked():
                 c1, c2 = getattr(self, f"{key}_combo1"), getattr(self, f"{key}_combo2")
                 d1 = self.calculate_from_combo(c1); d2 = self.calculate_from_combo(c2)
-                if d1 is not None and d2 is not None: 
+                if d1 is not None and d2 is not None:
                     self.place_landmark(pred, f"{key.capitalize()}_{c1.currentData}_{c2.currentData}", d1, d2)
         if self.al_group.isChecked():
             c1 = self.al_combo1; d1 = self.calculate_from_combo(c1)
@@ -331,7 +388,7 @@ class PredictionDialog(qt.QDialog):
                 self.place_landmark(pred, f"AlL_{c1.currentData}", d1, None, is_alare=True, is_left=True)
                 self.place_landmark(pred, f"AlR_{c1.currentData}", d1, None, is_alare=True, is_left=False)
         slicer.util.infoDisplay(f"Created '{name}'."); self.manager.refresh_list(); self.name_edit.setText(f"Pred_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}")
-    
+
     def place_landmark(self, pred_node, name, ntr_dist, ncor_dist, is_alare=False, is_left=None):
         hard = slicer.mrmlScene.GetFirstNodeByName("Ridel_hard_tissue"); nasion = np.zeros(3); hard.GetNthControlPointPosition(0, nasion)
         ntr_line = slicer.mrmlScene.GetFirstNodeByName("nTr_line"); ncor_line = slicer.mrmlScene.GetFirstNodeByName("nCor_line")
@@ -351,9 +408,9 @@ class PredictionDialog(qt.QDialog):
         formula = eq_text.replace('−','-').replace('×','*').replace('NH', str(nh)).replace('NBL', str(nbl)).replace('NBP', str(nbp))
         try: return eval(formula, {"__builtins__": {}})
         except Exception: return None
-    
+
     def get_equations(self):
-        return { 
+        return {
             'BSA_nh': {'text': '−17.805+1.170*NH'},
             'BSA_nbl': {'text': '30.403-0.290*NBL'},
             'BSA_nbp': {'text': '3.063+1.060*NBP'},
