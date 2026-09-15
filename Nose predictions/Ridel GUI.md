@@ -138,48 +138,86 @@ class RidelGUI:
         if not fhp_plane or not points_node:
             return
         if points_node.GetNumberOfControlPoints() < 5:
-            slicer.util.errorDisplay("Need at least 5 landmarks: nasion, nasospinale, rhinion, right alare, left alare.")
+            slicer.util.errorDisplay("Need at least 5 landmarks: nasion, "
+                                     "nasospinale, rhinion, right alare, left alare.")
             return
+
         for name in ['MSP', 'FRP']:
             node = slicer.mrmlScene.GetFirstNodeByName(name)
             if node:
                 slicer.mrmlScene.RemoveNode(node)
+
         pts = [np.zeros(3) for _ in range(5)]
         for i in range(5):
             points_node.GetNthControlPointPosition(i, pts[i])
         nasion, nasospinale, rhinion, right_alare, left_alare = pts
 
-        # FHP normal → superior
-        fhp_normal = np.zeros(3); fhp_plane.GetNormal(fhp_normal)
+        # ---- FHP normal (used exactly as the plane stores it) ----
+        fhp_normal = np.zeros(3)
+        fhp_plane.GetNormal(fhp_normal)
         if np.linalg.norm(fhp_normal) < 1e-9:
             slicer.util.errorDisplay("FHP plane has no valid normal.")
             return
         fhp_normal /= np.linalg.norm(fhp_normal)
-        mid_alare = 0.5 * (right_alare + left_alare)
-        if np.dot(fhp_normal, nasion - mid_alare) < 0:
-            fhp_normal = -fhp_normal
 
-        # MSP normal → patient's right
-        msp_normal = np.cross(nasospinale - nasion, rhinion - nasion)
-        if np.linalg.norm(msp_normal) < 1e-9:
-            slicer.util.errorDisplay("Hard-tissue landmarks are colinear; cannot define MSP.")
+        # ---- MSP normal: least-squares fit perpendicular to FHP ----
+        # Build an orthonormal basis (u, v) of the plane perpendicular to FHP.
+        u = np.array([1.0, 0.0, 0.0])
+        u -= np.dot(u, fhp_normal) * fhp_normal
+        if np.linalg.norm(u) < 1e-6:
+            u = np.array([0.0, 1.0, 0.0])
+            u -= np.dot(u, fhp_normal) * fhp_normal
+        if np.linalg.norm(u) < 1e-6:
+            slicer.util.errorDisplay("Cannot build a basis perpendicular to FHP.")
             return
+        u /= np.linalg.norm(u)
+        v = np.cross(fhp_normal, u)
+
+        # Project the two landmark displacements from nasion into (u, v)
+        d1 = nasospinale - nasion
+        d2 = rhinion - nasion
+        u1, v1 = np.dot(d1, u), np.dot(d1, v)
+        u2, v2 = np.dot(d2, u), np.dot(d2, v)
+
+        # 2x2 scatter matrix. Its smallest eigenvector is the plane normal
+        # (in the (u, v) basis), i.e. the direction the plane should face so
+        # that the three landmarks lie as close to it as possible.
+        xx = u1 * u1 + u2 * u2
+        xy = u1 * v1 + u2 * v2
+        yy = v1 * v1 + v2 * v2
+        if (xx + yy) < 1e-12:
+            slicer.util.errorDisplay("Nasion, nasospinale, and rhinion coincide.")
+            return
+        _, evecs = np.linalg.eigh(np.array([[xx, xy], [xy, yy]]))
+        a, b = evecs[0, 0], evecs[1, 0]      # smallest eigenvalue
+        msp_normal = a * u + b * v
         msp_normal /= np.linalg.norm(msp_normal)
-        msp_normal -= np.dot(msp_normal, fhp_normal) * fhp_normal
-        msp_normal /= np.linalg.norm(msp_normal)
+
+        # Canonicalize to point to the patient's right
         if np.dot(msp_normal, right_alare - left_alare) < 0:
             msp_normal = -msp_normal
 
-        # FRP normal → anterior
+        # ---- Anchor BOTH reference planes at the nasion ----
+        anchor = nasion.copy()
+
+        msp = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsPlaneNode', 'MSP')
+        msp.SetNormalWorld(msp_normal)
+        msp.SetOriginWorld(anchor)
+        msp.SetSize(150, 150)
+
         frp_normal = np.cross(fhp_normal, msp_normal)
         frp_normal /= np.linalg.norm(frp_normal)
 
-        center = (nasion + nasospinale + rhinion) / 3.0
-        msp = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsPlaneNode', 'MSP')
-        msp.SetNormalWorld(msp_normal); msp.SetOriginWorld(center); msp.SetSize(150, 150)
         frp = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsPlaneNode', 'FRP')
-        frp.SetNormalWorld(frp_normal); frp.SetOriginWorld(center); frp.SetSize(150, 150)
-        slicer.util.infoDisplay("Step 1: MSP and FRP created (canonicalized: FHP→superior, MSP→right, FRP→anterior).")
+        frp.SetNormalWorld(frp_normal)
+        frp.SetOriginWorld(anchor)
+        frp.SetSize(150, 150)
+        frp_disp = frp.GetDisplayNode()
+        frp_disp.SetColor(0.0, 0.75, 0.0)
+        frp_disp.SetSelectedColor(0.0, 0.75, 0.0)
+        frp_disp.SetOpacity(0.70)
+
+        slicer.util.infoDisplay("Step 1: MSP and FRP created.")
 
     # --- Step 2 ---
     def create_anatomical_planes(self):
