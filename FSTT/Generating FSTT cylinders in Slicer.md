@@ -3397,8 +3397,6 @@ print("   - Peg adjustment with sliders")
 print("   - Export to multiple formats")
                 
 ```
-
-
 </details>
 
 
