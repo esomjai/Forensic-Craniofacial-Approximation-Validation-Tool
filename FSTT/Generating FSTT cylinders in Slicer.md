@@ -7,7 +7,10 @@
 
 The code below opens a Graphic User Interface in 3D Slicer[^1] guiding through the process of landmark placement and the virtual FSTT cylinder creation. 
 <details>
+    
 <summary> Full GUI for FSTT </summary>
+
+
 ```python
 import os
 import vtk
