@@ -390,14 +390,66 @@ class RidelGUI:
     def onShowDetailedResults(self):
         soft_node = self.get_node(self.soft_tissue_selector, "True Soft Tissue Fiducials")
         pred_nodes = [n for n in slicer.util.getNodesByClass("vtkMRMLMarkupsFiducialNode") if n.GetName().startswith("Pred_")]
-        if not self.prediction_dialog or not pred_nodes:
+        if not pred_nodes:
             slicer.util.warningDisplay("Please run at least one prediction first.")
             return
+
+        # ---- Read core HT measurements directly from the scene ----
+        # This makes Step 6 work even when the Prediction dialog was not
+        # opened in this session (e.g. after reloading a saved scene that
+        # already contains Pred_* nodes).
+        measurements = {}
+        for _name in ("Nasal height", "Nasal width",
+                      "Nasal bone length", "Nasal bone projection"):
+            _node = slicer.mrmlScene.GetFirstNodeByName(_name)
+            if _node and isinstance(_node, slicer.vtkMRMLMarkupsLineNode):
+                try:
+                    measurements[_name] = _node.GetMeasurement('length').GetValue()
+                except Exception:
+                    measurements[_name] = None
+            else:
+                measurements[_name] = None
 
         self.detailedWidget = qt.QDialog(self.main_widget)
         self.detailedWidget.setWindowTitle("Detailed Prediction Results")
         self.detailedWidget.setMinimumSize(2200, 900)
         layout = qt.QVBoxLayout(self.detailedWidget)
+
+        # ---- Core hard tissue measurements table (first table) ----
+        meas_table = qt.QTableWidget()
+        meas_headers = ["Hard Tissue Measurement", "Value (mm/degree)"]
+        meas_table.setColumnCount(len(meas_headers))
+        meas_table.setHorizontalHeaderLabels(meas_headers)
+
+        meas_rows = [
+            ("Nasal height",          measurements.get("Nasal height")),
+            ("Nasal width",           measurements.get("Nasal width")),
+            ("Nasal bone length",     measurements.get("Nasal bone length")),
+            ("Nasal bone projection", measurements.get("Nasal bone projection")),
+        ]
+        angle_node = slicer.mrmlScene.GetFirstNodeByName("Nasal bone angle")
+        if angle_node is not None:
+            try:
+                angle_val = angle_node.GetMeasurement('angle').GetValue()
+            except Exception:
+                angle_val = None
+            if angle_val is not None:
+                meas_rows.append(("Nasal bone angle", angle_val))
+
+        meas_table.setRowCount(len(meas_rows))
+        for r, (name, val) in enumerate(meas_rows):
+            meas_table.setItem(r, 0, qt.QTableWidgetItem(name))
+            if val is None:
+                meas_table.setItem(r, 1, qt.QTableWidgetItem("N/A"))
+            else:
+                meas_table.setItem(r, 1, qt.QTableWidgetItem(f"{val:.2f}"))
+        meas_table.resizeColumnsToContents()
+        meas_table.resizeRowsToContents()
+
+        layout.addWidget(qt.QLabel("<b>Core Hard Tissue Measurements</b>"))
+        layout.addWidget(meas_table)
+
+        # ---- Detailed prediction-results table (existing) ----
         table = qt.QTableWidget()
 
         headers = [
@@ -443,7 +495,7 @@ class RidelGUI:
                         true_dict[prefix] = pos
                         break
 
-        all_equations = self.prediction_dialog.get_equations()
+        all_equations = PredictionDialog.get_equations()
 
         table.setRowCount(sum(node.GetNumberOfControlPoints() for node in pred_nodes))
         current_row = 0
@@ -457,7 +509,8 @@ class RidelGUI:
                 table.setItem(current_row, COL_PRED_NAME, qt.QTableWidgetItem(pred_label))
 
                 original_lm, ancestry, ntr_breakdown, ncor_breakdown = \
-                    self.get_calculation_breakdown(pred_label, all_equations)
+                    self.get_calculation_breakdown(pred_label, all_equations,
+                                                   measurements)
 
                 table.setItem(current_row, COL_ORIG_LM,   qt.QTableWidgetItem(original_lm))
                 table.setItem(current_row, COL_NTR_VARS,  qt.QTableWidgetItem(ntr_breakdown['vars']))
@@ -522,12 +575,13 @@ class RidelGUI:
         )
         layout.addWidget(caveat)
 
-        copy_button = qt.QPushButton("Copy Table to Clipboard")
-        copy_button.clicked.connect(lambda: self.onCopyToClipboard(table))
+        copy_button = qt.QPushButton("Copy Tables to Clipboard")
+        copy_button.clicked.connect(lambda: self.onCopyToClipboard(table, meas_table))
         layout.addWidget(copy_button)
         self.detailedWidget.show() 
+
     # --- Parsing ---
-    def get_calculation_breakdown(self, label, all_equations):
+    def get_calculation_breakdown(self, label, all_equations, measurements):
         parts = label.split('_')
         lm_part, eq_parts = parts[0], parts[1:]
 
@@ -550,7 +604,7 @@ class RidelGUI:
 
         def get_breakdown_for_eq(eq_code):
             breakdown = {'eq': "N/A", 'vars': "N/A", 'val': "N/A"}
-            if self.prediction_dialog and eq_code and eq_code in all_equations:
+            if eq_code and eq_code in all_equations:
                 eq_text = all_equations[eq_code]['text']
                 breakdown['eq'] = eq_text
                 used_vars = []
@@ -558,7 +612,6 @@ class RidelGUI:
                 for var_code, var_name in var_map.items():
                     if var_code in eq_text: used_vars.append(var_name)
                 breakdown['vars'] = "; ".join(used_vars) if used_vars else "Constant"
-                measurements = self.prediction_dialog.measurements
                 formula = eq_text.replace('−','-').replace('×','*')
                 is_calculable = True
                 for var_text, var_name in var_map.items():
@@ -583,15 +636,30 @@ class RidelGUI:
         ncor_breakdown = get_breakdown_for_eq(ncor_code)
         return original_lm, ancestry, ntr_breakdown, ncor_breakdown
 
-    def onCopyToClipboard(self, table_widget):
+    def onCopyToClipboard(self, table_widget, extra_table=None):
         clipboard = qt.QApplication.clipboard()
         if not clipboard:
             slicer.util.warningDisplay("Clipboard not available."); return
-        text = "\t".join([table_widget.horizontalHeaderItem(i).text() for i in range(table_widget.columnCount)]) + "\n"
-        for row in range(table_widget.rowCount):
-            text += "\t".join([table_widget.item(row, col).text().replace('\n', ' | ') if table_widget.item(row, col) else "" for col in range(table_widget.columnCount)]) + "\n"
+
+        def _table_to_tsv(t):
+            out = "\t".join(
+                [t.horizontalHeaderItem(i).text() for i in range(t.columnCount)]
+            ) + "\n"
+            for row in range(t.rowCount):
+                out += "\t".join([
+                    t.item(row, col).text().replace('\n', ' | ')
+                    if t.item(row, col) else ""
+                    for col in range(t.columnCount)
+                ]) + "\n"
+            return out
+
+        text = ""
+        if extra_table is not None:
+            text += _table_to_tsv(extra_table) + "\n"
+        text += _table_to_tsv(table_widget)
+
         clipboard.setText(text)
-        slicer.util.showStatusMessage("Table contents copied to clipboard.", 3000)
+        slicer.util.showStatusMessage("Tables copied to clipboard.", 3000)
 
     def close_all_dialogs(self):
         if self.detailedWidget and self.detailedWidget.isWidgetType(): self.detailedWidget.close()
@@ -978,7 +1046,8 @@ class PredictionDialog(qt.QDialog):
         return self.calculate_from_data(combo.currentData)
 
     # ---------------------------------------------------------------
-    def get_equations(self):
+    @staticmethod
+    def get_equations():
         # Keys: <POP>_<LM>_<PREDICTOR>. POP: BSA|WSA ; LM: pn|sn|al
         #   *_nh, *_nbl, *_nh+nbl  -> distance to nTr plane
         #   *_nbp                  -> distance to nCor plane
@@ -1068,6 +1137,7 @@ except:
     pass
 
 ridel_gui_instance = RidelGUI()
+
 
 
 ```
