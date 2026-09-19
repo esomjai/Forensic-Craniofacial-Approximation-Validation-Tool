@@ -11,7 +11,7 @@ import tempfile
 def _process_gui_events():
     """Yield to the Qt event loop so the UI can repaint.
     Tries both common entry points; silently no-ops if neither works."""
-    for fn in (lambda: _process_gui_events(),
+    for fn in (lambda: slicer.app.processEvents(),
                lambda: qt.QApplication.processEvents()):
         try:
             fn()
@@ -445,9 +445,22 @@ class RidelGUI:
                 meas_table.setItem(r, 1, qt.QTableWidgetItem(f"{val:.2f}"))
         meas_table.resizeColumnsToContents()
         meas_table.resizeRowsToContents()
+        meas_table.verticalHeader().setVisible(False)
+
+        # Fixed height so the first table always takes the same vertical
+        # space, regardless of how many rows it has or how large the
+        # detailed results table below becomes.
+        _row_h = meas_table.verticalHeader().defaultSectionSize()
+        _hdr_h = 32   # Slicer's default horizontal header height
+        meas_table.setFixedHeight(_hdr_h + len(meas_rows) * _row_h + 4)
+        meas_table.setVerticalScrollBarPolicy(qt.Qt.ScrollBarAlwaysOff)
+        meas_table.setHorizontalScrollBarPolicy(qt.Qt.ScrollBarAlwaysOff)
 
         layout.addWidget(qt.QLabel("<b>Core Hard Tissue Measurements</b>"))
         layout.addWidget(meas_table)
+
+        # Visible gap between the two tables
+        layout.addSpacing(20)
 
         # ---- Detailed prediction-results table (existing) ----
         table = qt.QTableWidget()
@@ -688,6 +701,16 @@ class PredictionDialog(qt.QDialog):
         self.meas_layout = qt.QFormLayout(self.meas_group)
         self.main_vlayout.addWidget(self.meas_group)
 
+        # ---- Copy-only button for the hard tissue measurements ----
+        self.copy_meas_btn = qt.QPushButton("Copy Hard Tissue Measurements")
+        self.copy_meas_btn.setStyleSheet("background-color: #E8F4FF; padding: 6px;")
+        self.copy_meas_btn.setToolTip(
+            "Copies only the hard tissue measurements (Nasal height, width, "
+            "bone length, bone projection, and bone angle) to the clipboard."
+        )
+        self.copy_meas_btn.clicked.connect(self.copy_measurements_to_clipboard)
+        self.main_vlayout.addWidget(self.copy_meas_btn)
+
         self.pn_group = self.create_landmark_group('pn', "Pronasale (Pn)", "Pn to nTr:", "Pn to nCor:")
         self.sn_group = self.create_landmark_group('sn', "Subnasale (Sn)", "Sn to nTr:", "Sn to nCor:")
         self.al_group = self.create_landmark_group('al', "Alare (Al)", "Al to nTr:", None)
@@ -756,6 +779,38 @@ class PredictionDialog(qt.QDialog):
                 self.meas_layout.addRow(n, l)
         self.create_btn.setEnabled(ok)
         self.run_all_btn.setEnabled(ok)
+
+    # ---------------------------------------------------------------
+    def copy_measurements_to_clipboard(self):
+        """Copy only the core hard-tissue measurements to the clipboard."""
+        clipboard = qt.QApplication.clipboard()
+        if not clipboard:
+            slicer.util.warningDisplay("Clipboard not available.")
+            return
+
+        text = "Hard Tissue Measurement\tValue (mm/degree)\n"
+        for name in ("Nasal height", "Nasal width",
+                     "Nasal bone length", "Nasal bone projection"):
+            val = self.measurements.get(name)
+            if val is None:
+                text += f"{name}\tN/A\n"
+            else:
+                text += f"{name}\t{val:.2f}\n"
+
+        # Optional: Nasal bone angle is read straight from the scene
+        angle_node = slicer.mrmlScene.GetFirstNodeByName("Nasal bone angle")
+        if angle_node is not None:
+            try:
+                angle_val = angle_node.GetMeasurement('angle').GetValue()
+                if angle_val is not None:
+                    text += f"Nasal bone angle\t{angle_val:.2f}\n"
+            except Exception:
+                pass
+
+        clipboard.setText(text)
+        slicer.util.showStatusMessage(
+            "Hard tissue measurements copied to clipboard.", 3000
+        )
 
     # ---------------------------------------------------------------
     def update_equations(self):
