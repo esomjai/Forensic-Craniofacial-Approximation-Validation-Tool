@@ -443,18 +443,30 @@ class RidelGUI:
                 meas_table.setItem(r, 1, qt.QTableWidgetItem("N/A"))
             else:
                 meas_table.setItem(r, 1, qt.QTableWidgetItem(f"{val:.2f}"))
-        meas_table.resizeColumnsToContents()
+                meas_table.resizeColumnsToContents()
         meas_table.resizeRowsToContents()
-        meas_table.verticalHeader().setVisible(False)
+        try:
+            meas_table.verticalHeader().setVisible(False)
+        except Exception:
+            pass
 
         # Fixed height so the first table always takes the same vertical
         # space, regardless of how many rows it has or how large the
         # detailed results table below becomes.
-        _row_h = meas_table.verticalHeader().defaultSectionSize()
-        _hdr_h = 32   # Slicer's default horizontal header height
-        meas_table.setFixedHeight(_hdr_h + len(meas_rows) * _row_h + 4)
-        meas_table.setVerticalScrollBarPolicy(qt.Qt.ScrollBarAlwaysOff)
-        meas_table.setHorizontalScrollBarPolicy(qt.Qt.ScrollBarAlwaysOff)
+        #
+        # Note: we deliberately do NOT call verticalHeader().defaultSectionSize()
+        # because some PythonQt builds expose that as an int property, which
+        # raises "'int' object is not callable" when invoked. A fixed
+        # per-row height of 30 px matches Slicer's default and keeps the
+        # table height deterministic.
+        _row_h = 30
+        _hdr_h = 32
+        meas_table.setFixedHeight(_hdr_h + len(meas_rows) * _row_h + 8)
+        try:
+            meas_table.setVerticalScrollBarPolicy(qt.Qt.ScrollBarAlwaysOff)
+            meas_table.setHorizontalScrollBarPolicy(qt.Qt.ScrollBarAlwaysOff)
+        except Exception:
+            pass
 
         layout.addWidget(qt.QLabel("<b>Core Hard Tissue Measurements</b>"))
         layout.addWidget(meas_table)
