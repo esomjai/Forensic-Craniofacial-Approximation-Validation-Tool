@@ -258,356 +258,31 @@ Expected view after code implementation:
 | n to rhi         |   bony n-rhi            | line connecting the hard tissue nasion  ‘n’ and the rhinion                                   | <span style="color:Purple">Purple</span> |
 | rhi to baseline  |   bony rhi ⟂ baseline            | The shortest perpendicular distance between the rhinion and the baseline (n-ANS)              | <span style="color:#B22222">Brick Red</span> |
 
-### FSTT guides
-To use the regression equations by Purkait and Singh (2024)[^2] to predict soft tissue landmarks using Facial Soft Tissue Thickness (FSTT) values, use this tool. It allows you to:
-
-- Set custom FSTT values for sn' (subnasale) based on male/female/non-sex-specific data
-- Set custom FSTT values for n' (nasion) based on male/female/non-sex-specific data
-- Create multiple predictions simultaneously to compare different FSTT assumptions
- - Adjust values using sliders within ±2 standard deviations
-
-Default FSTT values:
-
-| Study | FSTT | Mean Value (in mm) | Standard deviation (in mm) |
-|------------|-------------|-------|----------------|
-| Hona et al. (2024) | n-se' | 6 | SD: ±1.5 |
-| Hona et al. (2024) | sn-ss | 13.5 | SD: ±3.5 |
-| Purkait and Singh (2024) - male | sn-ss | 11.61 | SD: ±1.6 |
-| Purkait and Singh (2024) - female | sn-ss | 10.27 | SD: ±10.62 |
-| Purkait and Singh (2024) - male | n-n'/se' | 5.02 | SD: ±0.99 |
-| Purkait and Singh (2024) - female | n-n'/se' | 3.97 | SD: ±0.92 |
 
 
-> [!IMPORTANT]  
-This code requires the guide lines created in the previous "Hard tissue measurements" step.
-
-
-<details>
-<summary> FSTT </summary>
-
-
-
-```python
-
-import numpy as np
-import slicer
-import qt
-
-class FSTTPredictor(qt.QWidget):
-    def __init__(self):
-        super().__init__()
-        self.setup_ui()
-        
-    def setup_ui(self):
-        layout = qt.QVBoxLayout(self)
-        
-        title = qt.QLabel("<h2>FSTT Soft Tissue Predictions</h2>")
-        title.alignment = qt.Qt.AlignCenter
-        layout.addWidget(title)
-        
-        desc = qt.QLabel(
-            "Set Facial Soft Tissue Thickness (FSTT) values to predict soft tissue landmarks.<br>"
-            "You can select multiple options to compare different assumptions."
-        )
-        desc.setWordWrap(True)
-        layout.addWidget(desc)
-        
-        # ========== SN' SECTION ==========
-        sn_group = qt.QGroupBox("FSTT for Subnasale (sn')")
-        sn_layout = qt.QVBoxLayout(sn_group)
-        
-        sn_info = qt.QLabel(
-            "<i>Used to predict sn' from hard tissue 'subspinale (ss)'<br>"
-            "Male: 11.61±1.6mm | Female: 10.27±10.62mm | Non-sex: 13.5±3.5mm</i>"
-        )
-        sn_info.setWordWrap(True)
-        sn_layout.addWidget(sn_info)
-        
-        # Checkboxes
-        sn_check_layout = qt.QHBoxLayout()
-        self.sn_male_check = qt.QCheckBox("Male")
-        self.sn_female_check = qt.QCheckBox("Female")
-        self.sn_nonsex_check = qt.QCheckBox("Non-sex-specific")
-        self.sn_male_check.setChecked(True)
-        sn_check_layout.addWidget(self.sn_male_check)
-        sn_check_layout.addWidget(self.sn_female_check)
-        sn_check_layout.addWidget(self.sn_nonsex_check)
-        sn_check_layout.addStretch()
-        sn_layout.addLayout(sn_check_layout)
-        
-        # Male slider
-        self.sn_male_label = qt.QLabel("Male: 11.61 mm")
-        self.sn_male_slider = qt.QSlider(qt.Qt.Horizontal)
-        self.sn_male_slider.setRange(0, 100)
-        self.sn_male_slider.setValue(50)
-        self.sn_male_slider.valueChanged.connect(lambda v: self.update_label(
-            self.sn_male_label, "Male", 11.61, 1.6, v))
-        sn_layout.addWidget(self.sn_male_label)
-        sn_layout.addWidget(self.sn_male_slider)
-        
-        # Female slider
-        self.sn_female_label = qt.QLabel("Female: 10.27 mm")
-        self.sn_female_slider = qt.QSlider(qt.Qt.Horizontal)
-        self.sn_female_slider.setRange(0, 100)
-        self.sn_female_slider.setValue(50)
-        self.sn_female_slider.valueChanged.connect(lambda v: self.update_label(
-            self.sn_female_label, "Female", 10.27, 10.62, v))
-        self.sn_female_label.hide()
-        self.sn_female_slider.hide()
-        sn_layout.addWidget(self.sn_female_label)
-        sn_layout.addWidget(self.sn_female_slider)
-        
-        # Non-sex slider
-        self.sn_nonsex_label = qt.QLabel("Non-sex-specific: 13.50 mm")
-        self.sn_nonsex_slider = qt.QSlider(qt.Qt.Horizontal)
-        self.sn_nonsex_slider.setRange(0, 100)
-        self.sn_nonsex_slider.setValue(50)
-        self.sn_nonsex_slider.valueChanged.connect(lambda v: self.update_label(
-            self.sn_nonsex_label, "Non-sex-specific", 13.5, 3.5, v))
-        self.sn_nonsex_label.hide()
-        self.sn_nonsex_slider.hide()
-        sn_layout.addWidget(self.sn_nonsex_label)
-        sn_layout.addWidget(self.sn_nonsex_slider)
-        
-        # Connect checkboxes
-        self.sn_male_check.toggled.connect(lambda: self.toggle_slider(
-            self.sn_male_label, self.sn_male_slider, self.sn_male_check.isChecked()))
-        self.sn_female_check.toggled.connect(lambda: self.toggle_slider(
-            self.sn_female_label, self.sn_female_slider, self.sn_female_check.isChecked()))
-        self.sn_nonsex_check.toggled.connect(lambda: self.toggle_slider(
-            self.sn_nonsex_label, self.sn_nonsex_slider, self.sn_nonsex_check.isChecked()))
-        
-        layout.addWidget(sn_group)
-        
-        # ========== N' SECTION ==========
-        n_group = qt.QGroupBox("FSTT for Nasion (n')")
-        n_layout = qt.QVBoxLayout(n_group)
-        
-        n_info = qt.QLabel(
-            "<i>Used to predict n' from hard tissue 'nasion (n)'<br>"
-            "Male: 5.02±0.99mm | Female: 3.97±0.92mm | Non-sex: 6.0±1.5mm</i>"
-        )
-        n_info.setWordWrap(True)
-        n_layout.addWidget(n_info)
-        
-        # Checkboxes
-        n_check_layout = qt.QHBoxLayout()
-        self.n_male_check = qt.QCheckBox("Male")
-        self.n_female_check = qt.QCheckBox("Female")
-        self.n_nonsex_check = qt.QCheckBox("Non-sex-specific")
-        self.n_male_check.setChecked(True)
-        n_check_layout.addWidget(self.n_male_check)
-        n_check_layout.addWidget(self.n_female_check)
-        n_check_layout.addWidget(self.n_nonsex_check)
-        n_check_layout.addStretch()
-        n_layout.addLayout(n_check_layout)
-        
-        # Male slider
-        self.n_male_label = qt.QLabel("Male: 5.02 mm")
-        self.n_male_slider = qt.QSlider(qt.Qt.Horizontal)
-        self.n_male_slider.setRange(0, 100)
-        self.n_male_slider.setValue(50)
-        self.n_male_slider.valueChanged.connect(lambda v: self.update_label(
-            self.n_male_label, "Male", 5.02, 0.99, v))
-        n_layout.addWidget(self.n_male_label)
-        n_layout.addWidget(self.n_male_slider)
-        
-        # Female slider
-        self.n_female_label = qt.QLabel("Female: 3.97 mm")
-        self.n_female_slider = qt.QSlider(qt.Qt.Horizontal)
-        self.n_female_slider.setRange(0, 100)
-        self.n_female_slider.setValue(50)
-        self.n_female_slider.valueChanged.connect(lambda v: self.update_label(
-            self.n_female_label, "Female", 3.97, 0.92, v))
-        self.n_female_label.hide()
-        self.n_female_slider.hide()
-        n_layout.addWidget(self.n_female_label)
-        n_layout.addWidget(self.n_female_slider)
-        
-        # Non-sex slider
-        self.n_nonsex_label = qt.QLabel("Non-sex-specific: 6.00 mm")
-        self.n_nonsex_slider = qt.QSlider(qt.Qt.Horizontal)
-        self.n_nonsex_slider.setRange(0, 100)
-        self.n_nonsex_slider.setValue(50)
-        self.n_nonsex_slider.valueChanged.connect(lambda v: self.update_label(
-            self.n_nonsex_label, "Non-sex-specific", 6.0, 1.5, v))
-        self.n_nonsex_label.hide()
-        self.n_nonsex_slider.hide()
-        n_layout.addWidget(self.n_nonsex_label)
-        n_layout.addWidget(self.n_nonsex_slider)
-        
-        # Connect checkboxes
-        self.n_male_check.toggled.connect(lambda: self.toggle_slider(
-            self.n_male_label, self.n_male_slider, self.n_male_check.isChecked()))
-        self.n_female_check.toggled.connect(lambda: self.toggle_slider(
-            self.n_female_label, self.n_female_slider, self.n_female_check.isChecked()))
-        self.n_nonsex_check.toggled.connect(lambda: self.toggle_slider(
-            self.n_nonsex_label, self.n_nonsex_slider, self.n_nonsex_check.isChecked()))
-        
-        layout.addWidget(n_group)
-        
-        # ========== BUTTONS ==========
-        self.run_button = qt.QPushButton("Create FSTT Predictions")
-        self.run_button.setStyleSheet("background-color: #27ae60; color: white; font-weight: bold; padding: 10px;")
-        self.run_button.clicked.connect(self.run_predictions)
-        layout.addWidget(self.run_button)
-        
-        self.status_label = qt.QLabel("Ready")
-        self.status_label.setStyleSheet("color: blue;")
-        layout.addWidget(self.status_label)
-        
-        self.setWindowTitle("FSTT Predictions")
-        self.resize(500, 600)
-    
-    def toggle_slider(self, label, slider, visible):
-        label.setVisible(visible)
-        slider.setVisible(visible)
-    
-    def update_label(self, label, sex_type, mean, sd, slider_value):
-        value = mean + ((slider_value - 50) / 25.0) * sd
-        label.setText(f"{sex_type}: {value:.2f} mm")
-    
-    def get_fstt_value(self, mean, sd, slider_value):
-        return mean + ((slider_value - 50) / 25.0) * sd
-    
-    def run_predictions(self):
-        self.status_label.setText("Creating predictions...")
-        self.status_label.setStyleSheet("color: blue;")
-        slicer.app.processEvents()
-        
-        try:
-            hard = slicer.util.getNode('PS_hard_tissue')
-            
-            # Get guide lines
-            try:
-                st_sn_guide = slicer.util.getNode('st sn guide')
-                st_n_guide = slicer.util.getNode('st n guide')
-            except:
-                raise ValueError("Missing guide lines. Please run 'Hard tissue measurements' code first.")
-            
-            # Get guide directions
-            sn_start = self.get_point(st_sn_guide, 0)
-            sn_end = self.get_point(st_sn_guide, 1)
-            sn_dir = (sn_start - sn_end) / np.linalg.norm(sn_start - sn_end)  # Anterior direction
-            
-            n_start = self.get_point(st_n_guide, 0)
-            n_end = self.get_point(st_n_guide, 1)
-            n_dir = (n_start - n_end) / np.linalg.norm(n_start - n_end)  # Anterior direction
-            
-            # Get hard tissue points
-            ss = self.get_point(hard, 2)  # subspinale
-            n = self.get_point(hard, 0)   # nasion
-            
-            # ========== SN' PREDICTIONS ==========
-            pred_fstt_sn = self.get_or_create_node('pred_FSTT_sn')
-            
-            if self.sn_male_check.isChecked():
-                fstt = self.get_fstt_value(11.61, 1.6, self.sn_male_slider.value)
-                pred_pos = ss + sn_dir * fstt
-                pred_fstt_sn.AddControlPoint(pred_pos.tolist(), "sn'_FSTT_male")
-                print(f"✅ Created sn' male prediction: {fstt:.2f} mm")
-            
-            if self.sn_female_check.isChecked():
-                fstt = self.get_fstt_value(10.27, 10.62, self.sn_female_slider.value)
-                pred_pos = ss + sn_dir * fstt
-                pred_fstt_sn.AddControlPoint(pred_pos.tolist(), "sn'_FSTT_female")
-                print(f"✅ Created sn' female prediction: {fstt:.2f} mm")
-            
-            if self.sn_nonsex_check.isChecked():
-                fstt = self.get_fstt_value(13.5, 3.5, self.sn_nonsex_slider.value)
-                pred_pos = ss + sn_dir * fstt
-                pred_fstt_sn.AddControlPoint(pred_pos.tolist(), "sn'_FSTT_nonsex")
-                print(f"✅ Created sn' non-sex prediction: {fstt:.2f} mm")
-            
-            # Style sn' node
-            disp = pred_fstt_sn.GetDisplayNode()
-            disp.SetColor(0.8, 0.8, 0)
-            disp.SetSelectedColor(1, 1, 0)
-            disp.SetGlyphScale(1.8)
-            disp.SetTextScale(3.0)
-            
-            # ========== N' PREDICTIONS ==========
-            pred_fstt_n = self.get_or_create_node('pred_FSTT_n')
-            
-            if self.n_male_check.isChecked():
-                fstt = self.get_fstt_value(5.02, 0.99, self.n_male_slider.value)
-                pred_pos = n + n_dir * fstt
-                pred_fstt_n.AddControlPoint(pred_pos.tolist(), "n'_FSTT_male")
-                print(f"✅ Created n' male prediction: {fstt:.2f} mm")
-            
-            if self.n_female_check.isChecked():
-                fstt = self.get_fstt_value(3.97, 0.92, self.n_female_slider.value)
-                pred_pos = n + n_dir * fstt
-                pred_fstt_n.AddControlPoint(pred_pos.tolist(), "n'_FSTT_female")
-                print(f"✅ Created n' female prediction: {fstt:.2f} mm")
-            
-            if self.n_nonsex_check.isChecked():
-                fstt = self.get_fstt_value(6.0, 1.5, self.n_nonsex_slider.value)
-                pred_pos = n + n_dir * fstt
-                pred_fstt_n.AddControlPoint(pred_pos.tolist(), "n'_FSTT_nonsex")
-                print(f"✅ Created n' non-sex prediction: {fstt:.2f} mm")
-            
-            # Style n' node
-            disp = pred_fstt_n.GetDisplayNode()
-            disp.SetColor(0, 0.8, 0.8)
-            disp.SetSelectedColor(0, 1, 1)
-            disp.SetGlyphScale(1.8)
-            disp.SetTextScale(3.0)
-            
-            self.status_label.setText("✅ Predictions created successfully!")
-            self.status_label.setStyleSheet("color: green;")
-            
-        except Exception as e:
-            self.status_label.setText(f"❌ Error: {str(e)}")
-            self.status_label.setStyleSheet("color: red;")
-            print(f"Error: {e}")
-    
-    def get_point(self, node, idx):
-        pt = [0, 0, 0]
-        node.GetNthControlPointPosition(idx, pt)
-        return np.array(pt)
-    
-    def get_or_create_node(self, name):
-        try:
-            node = slicer.util.getNode(name)
-            while node.GetNumberOfControlPoints() > 0:
-                node.RemoveNthControlPoint(0)
-            return node
-        except:
-            return slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsFiducialNode', name)
-
-# Launch widget
-widget = FSTTPredictor()
-widget.show()
-
-```
-
-
-</details>
-
-## Predicting the soft tissue landmarks
+## Predicting the soft tissue landmark(s?)
 
 The theory behind both of the codes offered is the same. They define the soft tissue measurements as a line perpendicular to the bone/skin surface, parallel to the FHP, therefore the code project lines of an arbitrary length (70 mm) from the hard tissue landmark to gauge an approximate position of the soft tissue landmarks along the planes (knowing their positions relative to the FHP and MSP, but not the distance from the hard tissue landmark yet) - hence the role of the lines ending with "guide" in this step. 
 
-We will consider distances defined by the statistically significant equations intersecting these guide lines for predicting the **subnasale** (different approach) and **pronasale**. This is where we run into an issue with the **nt** soft tissue prediction - we could proceed with a predicted soft nasion, based on an FSTT value, but there is no "line" guiding the position of this; therefore only a radius closest to an arbitrary line can be stablished which is not justified by any anatomical or geometric knowledge. Therefore, the prediction of this will be excluded. 
+We will consider distances defined by the statistically significant equations intersecting these guide lines for predicting the  **pronasale**. 
+This is where we run into an issue with the **nt** soft tissue prediction - we could proceed with a predicted soft nasion, based on an FSTT value, but there is no "line" guiding the position of this; therefore only a radius closest to an arbitrary line can be stablished which is not justified by any anatomical or geometric knowledge. Therefore, the prediction of this will be excluded. Same for the sn' (already misdefined) - if we arbitrarily assumed a nasion-soft nasion FSTT value (from this paper, its follow-up; or non-sex specific) and from this projected n' drew a circle with the length calculated for soft n-ss (soft n-sn in reality) via the regression featuring n to rhi; it is TECHNICALLY predictable, but relies on the assumption of the use of the FSTT value, NOT the regression. 
 
-| Predicted Distance | Regression Equation | Biological Sex | 
-|--------------------|---------------------|----------------|
-| bony n-ss | 4.385 + 0.988 × (baseline) | male | 
-| soft n-nt | 31.76 + 1.009 × (n to rhi) | male | 
+| Predicted Distance | Regression Equation | Biological Sex | NOTE |
+|--------------------|---------------------|----------------|-----|
+| bony n-ss | 4.385 + 0.988 × (baseline) | male | for fragmented skull ONLY |
+| soft n-nt | 31.76 + 1.009 × (n to rhi) | male | MUST assume FSTT for n` AND that the nasal tip is on the FSTT guidelines - excluded |
 | prn baseline | 19.544 + 0.299 × (rhi to baseline) | male | 
 | alL-alR | 25.256 + 0.55 × (AB) | male | not relevant for prediction from hard tissue |
 | nbL-nbR | 33.433 + 0.362 × (CD) | male |  not relevant for prediction from hard tissue |
-| bony n-ss | 7.673 + 0.909 × (baseline) | female | 
-| soft n-nt | 33.23 + 0.768 × (n to rhi) | female | 
-| prn baseline | 15.056 + 0.622 × (rhi to baseline) | female |  
+| bony n-ss | 7.673 + 0.909 × (baseline) | female | | for fragmented skull ONLY |
+| soft n-nt | 33.23 + 0.768 × (n to rhi) | female | MUST assume FSTT for n` - excluded |
+| prn baseline | 15.056 + 0.622 × (rhi to baseline) | female |  | MUST assume FSTT for n` AND that the nasal tip is on the FSTT guidelines - excluded |
 
 Left with equations for each biological sex and the distances they provide, the next step is : 
 - The equations featuring the baseline calculate the perpendicular distance between the **baseline** and the **pronasale**. Because Fig. 1 in Purkait & Singh, 2024[^2] shows a line starting from the ANS, perpendicular to the baseline connecting to the pronasale, we create the ANS perpendicular line. The "origin" from where we can apply the distance estimated by the equation will be where the baseline intersects the ANS perpendicular line, anteriorly. This is how we get the **pred_prn**. 
-- The equations predicting **bony n-ss** and **soft n-nt** define the **nt** by the intersection point of these distances (circle 1's centre is the "n" ("PS_hard_tissue"), its radius is calculated by the equation for bony n-ss; circle 2's centre is the predicted soft tissue n' ("pred_soft_tissue_male/female"), its radius is calculated by the equation for soft n-nt)
 
 <details>
-<summary> GUI for prn/nt prediction </summary>
+<summary> GUI for prn prediction </summary>
 
 ``` python
 import numpy as np
@@ -620,8 +295,8 @@ class NasalPredictionWidget(qt.QWidget):
         self.setup_ui()
         self.connect_signals()
         self.regression_coefficients = {
-            'male': {'prn_baseline': (19.544, 0.299), 'soft_n_nt': (31.76, 1.009)},
-            'female': {'prn_baseline': (15.056, 0.622), 'soft_n_nt': (33.23, 0.768)}
+            'male': {'prn_baseline': (19.544, 0.299)},
+            'female': {'prn_baseline': (15.056, 0.622)}
         }
         
     def setup_ui(self):
@@ -644,7 +319,7 @@ class NasalPredictionWidget(qt.QWidget):
         layout.addLayout(form)
         
         info = qt.QLabel("<b>Required:</b> PS_hard_tissue, baseline, rhi to baseline, n to rhi, MSP<br>"
-                        "<b>Creates:</b> pred_prn and pred_nt for selected sex(es)")
+                        "<b>Creates:</b> pred_prn selected sex(es)")
         info.setWordWrap(True)
         layout.addWidget(info)
         
@@ -741,35 +416,10 @@ class NasalPredictionWidget(qt.QWidget):
             self.create_line(ans - 30*perp_vec, ans + 30*perp_vec, f"ANS_perp_{sex}", [0,0.8,0.8], [0,1,1])
             self.create_line(ans, pred_prn, f"ANS_to_prn_{sex}", [0.8,0.8,0], [1,0.7,0])
         
-        # Predict nasion tip using circle intersection
-        n_rhi_len = self.get_line_length(n_rhi_node)
-        nt_intercept, nt_coeff = self.regression_coefficients[sex]['soft_n_nt']
-        nt_radius = nt_intercept + nt_coeff * n_rhi_len
-        prn_radius = prn_dist
-        
-        # Get soft tissue n' from FSTT predictions or use hard n
-        try:
-            fstt_n_node = slicer.util.getNode('pred_FSTT_n')
-            n_soft = self.get_point(fstt_n_node, 0)
-        except:
-            n_soft = self.get_point(hard, 0)  # Fallback to hard n
-        
-        intersections = self.find_circle_intersections(n_soft, nt_radius, pred_prn, prn_radius)
-        
-        if intersections:
-            pred_nt = self.select_best_nt(intersections[0], intersections[1], n_soft)
-            
-            if show_lines:
-                # Create circle visualizations (simplified as lines from center to prediction)
-                self.create_line(n_soft, pred_nt, f"n_to_nt_{sex}", [0.5,0.5,1], [0.7,0.7,1], 0.15)
-                self.create_line(pred_prn, pred_nt, f"prn_to_nt_{sex}", [1,0.5,0.5], [1,0.7,0.7], 0.15)
-        else:
-            print(f"Warning: Could not find nt intersection for {sex}")
-            pred_nt = n_soft - np.array([0, 0, nt_radius])  # Fallback
-        
+    
         # Add predictions to node
         pred_node.AddControlPoint(pred_prn.tolist(), f"pred_prn_{sex}")
-        pred_node.AddControlPoint(pred_nt.tolist(), f"pred_nt_{sex}")
+       
         
         # Set colors
         disp = pred_node.GetDisplayNode()
@@ -782,28 +432,9 @@ class NasalPredictionWidget(qt.QWidget):
         disp.SetGlyphScale(1.8)
         disp.SetTextScale(3.0)
         
-        print(f"✅ {sex.capitalize()} predictions: prn={pred_prn}, nt={pred_nt}")
+        print(f"✅ {sex.capitalize()} predictions: prn={pred_prn})
     
-    def find_circle_intersections(self, c1, r1, c2, r2):
-        d = np.linalg.norm(c2 - c1)
-        if d > r1 + r2 or d < abs(r1 - r2) or d == 0:
-            return None
-        a = (r1**2 - r2**2 + d**2) / (2*d)
-        h = np.sqrt(r1**2 - a**2)
-        direction = (c2 - c1) / d
-        P = c1 + a * direction
-        perp = np.array([-direction[1], direction[0], 0])
-        if np.linalg.norm(perp) > 0:
-            perp /= np.linalg.norm(perp)
-        return P + h * perp, P - h * perp
     
-    def select_best_nt(self, int1, int2, n_soft):
-        if int2 is None:
-            return int1
-        # Choose more inferior (lower Z) and anterior (higher Y)
-        if abs(int1[2] - int2[2]) > 1.0:
-            return int1 if int1[2] < int2[2] else int2
-        return int1 if int1[1] > int2[1] else int2
     
     def get_point(self, node, idx):
         pt = [0, 0, 0]
@@ -833,7 +464,7 @@ widget.show()
 
 </details>
 
-### Measuring the prediction errors
+### Measuring the prediction error
 For the following code to work, please place the [soft tissue landmarks] on the model. These are stored in [PS_soft_tissue.mrk.json](https://github.com/user-attachments/files/21253770/PS_soft_tissue.mrk.json). 
 The script below connects all the prediction set landmarks with the true landmark, measuring the distance between them and creates  red lines called"error_{predicted lmrk name}". 
 
@@ -875,13 +506,11 @@ errors = {}
 try:
     male = slicer.util.getNode('pred_soft_tissue_male')
     prn = get_point(ps_soft, "prn")
-    nt = get_point(ps_soft, "nt")
     pred_prn = get_point(male, "pred_prn_male")
-    pred_nt = get_point(male, "pred_nt_male")
+  
     if pred_prn is not None and prn is not None:
         errors['prn_male'] = create_error_line(pred_prn, prn, "error_prn_male")
-    if pred_nt is not None and nt is not None:
-        errors['nt_male'] = create_error_line(pred_nt, nt, "error_nt_male")
+    
 except:
     pass
 
@@ -889,13 +518,12 @@ except:
 try:
     female = slicer.util.getNode('pred_soft_tissue_female')
     prn = get_point(ps_soft, "prn")
-    nt = get_point(ps_soft, "nt")
+    
     pred_prn = get_point(female, "pred_prn_female")
-    pred_nt = get_point(female, "pred_nt_female")
+   
     if pred_prn is not None and prn is not None:
         errors['prn_female'] = create_error_line(pred_prn, prn, "error_prn_female")
-    if pred_nt is not None and nt is not None:
-        errors['nt_female'] = create_error_line(pred_nt, nt, "error_nt_female")
+   
 except:
     pass
 
