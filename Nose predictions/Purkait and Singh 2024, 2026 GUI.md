@@ -10,7 +10,7 @@ import os
 
 class PurkaitSinghGUI(qt.QWidget):
     """
-    Purkait & Singh (2024; 2026) Nasal Prediction Method.
+    Purkait and Singh (2024; 2026) Nasal Prediction Method.
 
     Only one 3D soft-tissue landmark is predicted: the pronasale (prn),
     via the regression  prn_perp_baseline = intercept + slope * (bony rhi_perp_baseline),
@@ -19,7 +19,7 @@ class PurkaitSinghGUI(qt.QWidget):
     All other regression outputs (bony n-sn, soft n-nt, al-al, nb-nb) and
     FSTT values from the papers are reported as scalars, compared against
     their directly-measured soft-tissue counterparts when PS_soft_tissue
-    is loaded. When the "Compare 2024 & 2026" option is selected, both
+    is loaded. When the "Compare 2024 and 2026" option is selected, both
     regression sets are computed and shown side by side.
     """
 
@@ -84,7 +84,7 @@ class PurkaitSinghGUI(qt.QWidget):
 
     def __init__(self, parent=None):
         qt.QWidget.__init__(self, parent)
-        self.setWindowTitle("Purkait & Singh (2024; 2026) — prn prediction")
+        self.setWindowTitle("Purkait and Singh (2024; 2026) — prn prediction")
         self.setObjectName("PurkaitSinghGUI")
 
         self.setWindowFlags(qt.Qt.Window)
@@ -149,19 +149,19 @@ class PurkaitSinghGUI(qt.QWidget):
         layout = qt.QVBoxLayout(widget)
         layout.setSpacing(15)
 
-        title = qt.QLabel("Welcome to Purkait & Singh (2024; 2026) Method")
+        title = qt.QLabel("Welcome to Purkait and Singh (2024; 2026) Method")
         title.setStyleSheet("font-weight: bold; font-size: 18px;")
         title.setAlignment(qt.Qt.AlignCenter)
         layout.addWidget(title)
 
         desc = qt.QLabel(
             "This tool predicts the pronasale (prn) as a 3D soft-tissue landmark "
-            "using the regression equations of Purkait & Singh.\n\n"
+            "using the regression equations of Purkait and Singh.\n\n"
             "All other quantities from the papers (bony n-sn, soft n-nt, al-al, nb-nb, "
             "and FSTT values at n, rhi, sn) are reported as scalar measurements and "
             "compared against their directly-measured soft-tissue counterparts when "
             "PS_soft_tissue is loaded.\n\n"
-            "Use the 'Compare 2024 & 2026' option in Step 3 to view both regression "
+            "Use the 'Compare 2024 and 2026' option in Step 3 to view both regression "
             "sets side by side."
         )
         desc.setWordWrap(True)
@@ -343,13 +343,13 @@ class PurkaitSinghGUI(qt.QWidget):
         versionLayout = qt.QVBoxLayout(versionGroup)
 
         self.version2024Radio = qt.QRadioButton(
-            "Purkait & Singh (2024)  —  n = 200 (100 males; 100 females)"
+            "Purkait and Singh (2024)  —  n = 200 (100 males; 100 females)"
         )
         self.version2026Radio = qt.QRadioButton(
-            "Purkait & Singh (2026)  —  n = 409 (226 males; 183 females)"
+            "Purkait and Singh (2026)  —  n = 409 (226 males; 183 females)"
         )
         self.versionBothRadio = qt.QRadioButton(
-            "Compare 2024 & 2026  —  run both regression sets and show paired values"
+            "Compare 2024 and 2026  —  run both regression sets and show paired values"
         )
         self.version2024Radio.setChecked(True)
         versionLayout.addWidget(self.version2024Radio)
@@ -406,7 +406,7 @@ class PurkaitSinghGUI(qt.QWidget):
             "    prn_perp_baseline = intercept + slope * (bony rhi_perp_baseline)\n\n"
             "combined with the geometric constraint that prn lies on the line through ANS "
             "perpendicular to the baseline (anteriorly). No FSTT value is required.\n\n"
-            "If 'Compare 2024 & 2026' was selected in Step 3, one prediction row is produced "
+            "If 'Compare 2024 and 2026' was selected in Step 3, one prediction row is produced "
             "per (version, sex) combination."
         )
         desc.setWordWrap(True)
@@ -495,7 +495,7 @@ class PurkaitSinghGUI(qt.QWidget):
         layout.setSpacing(15)
         layout.setContentsMargins(10, 10, 10, 10)
 
-        title = qt.QLabel("Step 6: Results & Export")
+        title = qt.QLabel("Step 6: Results and Export")
         title.setStyleSheet("font-weight: bold; font-size: 18px; margin-bottom: 10px;")
         title.setAlignment(qt.Qt.AlignCenter)
         layout.addWidget(title)
@@ -507,7 +507,7 @@ class PurkaitSinghGUI(qt.QWidget):
 
         coordDesc = qt.QLabel(
             "RAS coordinate system (Right, Anterior, Superior). One row per (study version, sex) "
-            "prn prediction. When 'Compare 2024 & 2026' is used, each version's regression equation "
+            "prn prediction. When 'Compare 2024 and 2026' is used, each version's regression equation "
             "is stated in the second column so the two predictions can be compared."
         )
         coordDesc.setWordWrap(True)
@@ -542,7 +542,7 @@ class PurkaitSinghGUI(qt.QWidget):
         layout.addWidget(spacer1)
 
         # ========== TABLE 2 ==========
-        measLabel = qt.QLabel("<b>Table 2 — Measurements: Calculated vs True (2024 &amp; 2026 side by side)</b>")
+        measLabel = qt.QLabel("<b>Table 2 — Measurements: Calculated vs True (2024 andamp; 2026 side by side)</b>")
         measLabel.setStyleSheet("font-size: 14px; margin-top: 10px; margin-bottom: 5px;")
         layout.addWidget(measLabel)
 
