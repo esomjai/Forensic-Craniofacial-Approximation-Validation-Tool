@@ -542,7 +542,7 @@ class PurkaitSinghGUI(qt.QWidget):
         layout.addWidget(spacer1)
 
         # ========== TABLE 2 ==========
-        measLabel = qt.QLabel("<b>Table 2 — Measurements: Calculated vs True (2024 andamp; 2026 side by side)</b>")
+        measLabel = qt.QLabel("<b>Table 2 — Measurements: Calculated vs True (2024 &amp; 2026 side by side)</b>")
         measLabel.setStyleSheet("font-size: 14px; margin-top: 10px; margin-bottom: 5px;")
         layout.addWidget(measLabel)
 
@@ -561,17 +561,18 @@ class PurkaitSinghGUI(qt.QWidget):
         layout.addWidget(measDesc)
 
         self.measurementsTable = qt.QTableWidget()
-        self.measurementsTable.setColumnCount(8)
+        self.measurementsTable.setColumnCount(9)
         self.measurementsTable.setHorizontalHeaderLabels([
-            "Measurement", "Type",
-            "2024 M", "2024 F",
-            "2026 M", "2026 F",
-            "True", "Unit"
+            "Measurement", "Type", "Sex",
+            "2024", "2024 Δ vs True",
+            "2026", "2026 Δ vs True",
+            "True",
+            "Unit"
         ])
 
         measHeader = self.measurementsTable.horizontalHeader()
         measHeader.setSectionResizeMode(0, qt.QHeaderView.Stretch)
-        for col in range(1, 8):
+        for col in range(1, 9):
             measHeader.setSectionResizeMode(col, qt.QHeaderView.ResizeToContents)
 
         self.measurementsTable.setMinimumHeight(450)
@@ -1225,164 +1226,157 @@ class PurkaitSinghGUI(qt.QWidget):
         return intercept + slope * input_value
 
     def updateMeasurementsTable(self):
-        """Reorganised Table 2: one row per measurement.
-        Columns: Measurement | Type | 2024 M | 2024 F | 2026 M | 2026 F | True | Unit
-        Sex and version are expressed as columns, not repeated per-row.
-        """
         true_meas = self.computeTrueMeasurements()
 
-        versions = self.getActiveVersions()   # ['2024'], ['2026'], or ['2024','2026']
-        sexes = self.getActiveSexes()         # ['male'], ['female'], or ['male','female']
-
-        def allow(version, sex):
-            return version in versions and sex in sexes
-
-        # Helper to fetch regression scalar
-        def reg(version, sex, key, input_value):
-            if not allow(version, sex):
-                return None
-            return self._regression_scalar(version, sex, key, input_value)
-
-        # Helper to fetch FSTT value
-        def fstt(version, sex, landmark_key):
-            if not allow(version, sex):
-                return None
-            return self.FSTT_TABLE.get(version, {}).get(landmark_key, {}).get(sex, None)
+        # Which versions to display: both if compare mode, else the selected one.
+        versions = self.getActiveVersions()
+        sex_rows = self.getActiveSexes()
 
         rows = []
 
-        # --- 1. Input (hard-tissue) measurements ---
+        # --- 1. Input rows ---
         input_keys = [
-            ("bony n-ans (baseline)",          "bony n-ans (baseline)"),
-            ("bony n-rhi",                     "bony n-rhi"),
-            ("bony rhi perp baseline",         "bony rhi perp baseline"),
-            ("AB",                             "AB"),
-            ("CD",                             "CD"),
-            ("bony n-ss (measured)",           "bony n-ss (measured)"),
+            "bony n-ans (baseline)",
+            "bony n-rhi",
+            "bony rhi perp baseline",
+            "AB",
+            "CD",
+            "bony n-ss (measured)",
         ]
-        for key, label in input_keys:
+        for key in input_keys:
             if key in self.all_measurements:
-                v = self.all_measurements[key]["value"]
+                val = self.all_measurements[key]["value"]
                 rows.append({
-                    "name": label,
+                    "name": key,
                     "type": "input",
-                    # Same value shown in all four version/sex cells: physical measurement
-                    "v2024M": v, "v2024F": v,
-                    "v2026M": v, "v2026F": v,
+                    "sex": "—",
+                    "v2024": val if "2024" in versions else None,
+                    "v2026": val if "2026" in versions else None,
                     "true": None,
                     "unit": self.all_measurements[key]["unit"],
                 })
 
-        # --- 2. Regression-derived measurements ---
-        base_val = self.all_measurements.get("bony n-ans (baseline)", {}).get("value", None)
-        nrhi_val = self.all_measurements.get("bony n-rhi", {}).get("value", None)
-        rhib_val = self.all_measurements.get("bony rhi perp baseline", {}).get("value", None)
-        ab_val   = self.all_measurements.get("AB", {}).get("value", None)
-        cd_val   = self.all_measurements.get("CD", {}).get("value", None)
-
-        rows.append({
-            "name": "bony n-sn",
-            "type": "regression",
-            "v2024M": reg("2024", "male",   "bony_n_sn", base_val),
-            "v2024F": reg("2024", "female", "bony_n_sn", base_val),
-            "v2026M": reg("2026", "male",   "bony_n_sn", base_val),
-            "v2026F": reg("2026", "female", "bony_n_sn", base_val),
-            "true": true_meas.get("bony n-sn (measured)", None),
-            "unit": "mm",
-        })
-
-        rows.append({
-            "name": "soft n-nt",
-            "type": "regression",
-            "v2024M": reg("2024", "male",   "soft_n_nt", nrhi_val),
-            "v2024F": reg("2024", "female", "soft_n_nt", nrhi_val),
-            "v2026M": reg("2026", "male",   "soft_n_nt", nrhi_val),
-            "v2026F": reg("2026", "female", "soft_n_nt", nrhi_val),
-            "true": true_meas.get("soft n-nt (true)", None),
-            "unit": "mm",
-        })
-
-        rows.append({
-            "name": "prn perp baseline",
-            "type": "regression",
-            "v2024M": reg("2024", "male",   "prn_baseline", rhib_val),
-            "v2024F": reg("2024", "female", "prn_baseline", rhib_val),
-            "v2026M": reg("2026", "male",   "prn_baseline", rhib_val),
-            "v2026F": reg("2026", "female", "prn_baseline", rhib_val),
-            "true": true_meas.get("prn perp baseline (true)", None),
-            "unit": "mm",
-        })
-
-        rows.append({
-            "name": "al-al",
-            "type": "regression",
-            # 2024 female is None by design (not significant)
-            "v2024M": reg("2024", "male",   "al_al", ab_val),
-            "v2024F": reg("2024", "female", "al_al", ab_val),
-            "v2026M": reg("2026", "male",   "al_al", ab_val),
-            "v2026F": reg("2026", "female", "al_al", ab_val),
-            "true": true_meas.get("al-al (true)", None),
-            "unit": "mm",
-            "note": "2024 female al-al regression is not significant (p=0.07) and is intentionally blank.",
-        })
-
-        rows.append({
-            "name": "nb-nb",
-            "type": "regression",
-            "v2024M": reg("2024", "male",   "nb_nb", cd_val),
-            "v2024F": reg("2024", "female", "nb_nb", cd_val),
-            "v2026M": reg("2026", "male",   "nb_nb", cd_val),
-            "v2026F": reg("2026", "female", "nb_nb", cd_val),
-            "true": true_meas.get("nb-nb (true)", None),
-            "unit": "mm",
-            "note": "2024 female nb-nb regression is not significant (p=0.269) and is intentionally blank.",
-        })
-
-        # --- 3. FSTT values ---
-        for landmark_key, label, true_key in [
-            ("n",   "FSTT n'",   "FSTT n' (true)"),
-            ("rhi", "FSTT rhi'", "FSTT rhi' (true)"),
-            ("sn",  "FSTT sn'",  "FSTT sn' (true)"),
-        ]:
+        # --- 2. Regression and FSTT rows (one per sex) ---
+        for sex in sex_rows:
+            # 2a. bony n-sn
+            base_val = self.all_measurements.get("bony n-ans (baseline)", {}).get("value", None)
+            true_val = true_meas.get("bony n-sn (measured)", None)
             rows.append({
-                "name": label,
-                "type": "FSTT",
-                "v2024M": fstt("2024", "male",   landmark_key),
-                "v2024F": fstt("2024", "female", landmark_key),
-                "v2026M": fstt("2026", "male",   landmark_key),
-                "v2026F": fstt("2026", "female", landmark_key),
-                "true": true_meas.get(true_key, None),
+                "name": "bony n-sn",
+                "type": "regression",
+                "sex": sex,
+                "v2024": self._regression_scalar("2024", sex, "bony_n_sn", base_val),
+                "v2026": self._regression_scalar("2026", sex, "bony_n_sn", base_val),
+                "true": true_val,
                 "unit": "mm",
             })
 
-        # --- 4. True-only soft-tissue measurements ---
-        for label, key in [
-            ("soft n-sn",  "soft n-sn (true)"),
-            ("X-Y",        "X-Y (true)"),
-        ]:
-            if key in true_meas:
+            # 2b. soft n-nt
+            nrhi_val = self.all_measurements.get("bony n-rhi", {}).get("value", None)
+            true_val = true_meas.get("soft n-nt (true)", None)
+            rows.append({
+                "name": "soft n-nt",
+                "type": "regression",
+                "sex": sex,
+                "v2024": self._regression_scalar("2024", sex, "soft_n_nt", nrhi_val),
+                "v2026": self._regression_scalar("2026", sex, "soft_n_nt", nrhi_val),
+                "true": true_val,
+                "unit": "mm",
+            })
+
+            # 2c. prn perp baseline
+            rhib_val = self.all_measurements.get("bony rhi perp baseline", {}).get("value", None)
+            true_val = true_meas.get("prn perp baseline (true)", None)
+            rows.append({
+                "name": "prn perp baseline",
+                "type": "regression",
+                "sex": sex,
+                "v2024": self._regression_scalar("2024", sex, "prn_baseline", rhib_val),
+                "v2026": self._regression_scalar("2026", sex, "prn_baseline", rhib_val),
+                "true": true_val,
+                "unit": "mm",
+            })
+
+            # 2d. al-al
+            ab_val = self.all_measurements.get("AB", {}).get("value", None)
+            true_val = true_meas.get("al-al (true)", None)
+            v2024 = self._regression_scalar("2024", sex, "al_al", ab_val)
+            v2026 = self._regression_scalar("2026", sex, "al_al", ab_val)
+            note_2024 = None
+            if sex == "female" and v2024 is None:
+                note_2024 = "2024 female al-al regression not significant (p=0.07); no equation used."
+            rows.append({
+                "name": "al-al",
+                "type": "regression",
+                "sex": sex,
+                "v2024": v2024,
+                "v2026": v2026,
+                "true": true_val,
+                "unit": "mm",
+                "note": note_2024,
+            })
+
+            # 2e. nb-nb
+            cd_val = self.all_measurements.get("CD", {}).get("value", None)
+            true_val = true_meas.get("nb-nb (true)", None)
+            v2024 = self._regression_scalar("2024", sex, "nb_nb", cd_val)
+            v2026 = self._regression_scalar("2026", sex, "nb_nb", cd_val)
+            note_2024 = None
+            if sex == "female" and v2024 is None:
+                note_2024 = "2024 female nb-nb regression not significant (p=0.269); no equation used."
+            rows.append({
+                "name": "nb-nb",
+                "type": "regression",
+                "sex": sex,
+                "v2024": v2024,
+                "v2026": v2026,
+                "true": true_val,
+                "unit": "mm",
+                "note": note_2024,
+            })
+
+            # 2f. FSTT rows
+            for landmark_key, landmark_label, true_key in [
+                ("n",   "FSTT n'",   "FSTT n' (true)"),
+                ("rhi", "FSTT rhi'", "FSTT rhi' (true)"),
+                ("sn",  "FSTT sn'",  "FSTT sn' (true)"),
+            ]:
+                v2024 = self.FSTT_TABLE.get("2024", {}).get(landmark_key, {}).get(sex, None)
+                v2026 = self.FSTT_TABLE.get("2026", {}).get(landmark_key, {}).get(sex, None)
+                true_val = true_meas.get(true_key, None)
                 rows.append({
-                    "name": label,
-                    "type": "true-only",
-                    "v2024M": None, "v2024F": None,
-                    "v2026M": None, "v2026F": None,
-                    "true": true_meas[key],
+                    "name": landmark_label,
+                    "type": "FSTT",
+                    "sex": sex,
+                    "v2024": v2024,
+                    "v2026": v2026,
+                    "true": true_val,
                     "unit": "mm",
                 })
 
-        # --- 5. True-only angles ---
-        for label, key in [
-            ("soft rhi'-prn-sn'", "soft rhi'-prn-sn' (true)"),
-            ("prn-sn'-nt",        "prn-sn'-nt (true)"),
-            ("al-prn-al",         "al-prn-al (true)"),
-        ]:
-            if key in true_meas:
+        # --- 3. True-only soft tissue measurements ---
+        for name in ["soft n-sn (true)", "X-Y (true)"]:
+            if name in true_meas:
                 rows.append({
-                    "name": label,
+                    "name": name.replace(" (true)", ""),
                     "type": "true-only",
-                    "v2024M": None, "v2024F": None,
-                    "v2026M": None, "v2026F": None,
-                    "true": true_meas[key],
+                    "sex": "—",
+                    "v2024": None,
+                    "v2026": None,
+                    "true": true_meas[name],
+                    "unit": "mm",
+                })
+
+        # --- 4. True-only angles ---
+        for name in ["soft rhi'-prn-sn' (true)", "prn-sn'-nt (true)", "al-prn-al (true)"]:
+            if name in true_meas:
+                rows.append({
+                    "name": name.replace(" (true)", ""),
+                    "type": "true-only",
+                    "sex": "—",
+                    "v2024": None,
+                    "v2026": None,
+                    "true": true_meas[name],
                     "unit": "degrees",
                 })
 
@@ -1390,35 +1384,26 @@ class PurkaitSinghGUI(qt.QWidget):
         self.measurementsTable.setRowCount(len(rows))
 
         def fmt(v):
-            return "{0:.2f}".format(v) if v is not None else ""
+            return "{0:.2f}".format(v) if v is not None else "N/A"
 
-        # Colour a data cell according to |value - true|
-        def make_data_cell(value, true_value, unit):
-            it = qt.QTableWidgetItem(fmt(value))
+        def make_diff(value, true_value, unit):
+            if value is None or true_value is None:
+                it = qt.QTableWidgetItem("N/A")
+                it.setFlags(qt.Qt.ItemIsEnabled)
+                return it
+            diff = abs(value - true_value)
+            it = qt.QTableWidgetItem("{0:.2f}".format(diff))
             it.setFlags(qt.Qt.ItemIsEnabled | qt.Qt.ItemIsSelectable)
-            if value is not None and true_value is not None and unit == "mm":
-                diff = abs(value - true_value)
+            f = qt.QFont()
+            f.setBold(True)
+            it.setFont(f)
+            if unit == "mm":
                 if diff > 5.0:
                     it.setBackground(qt.QColor(255, 200, 200))
                 elif diff > 2.0:
                     it.setBackground(qt.QColor(255, 255, 200))
                 else:
                     it.setBackground(qt.QColor(200, 255, 200))
-            elif value is not None and true_value is not None and unit == "degrees":
-                diff = abs(value - true_value)
-                if diff > 5.0:
-                    it.setBackground(qt.QColor(255, 200, 200))
-                elif diff > 2.0:
-                    it.setBackground(qt.QColor(255, 255, 200))
-                else:
-                    it.setBackground(qt.QColor(200, 255, 200))
-            return it
-
-        # Colour empty cells subtly so they don't dominate visually
-        def make_blank_cell():
-            it = qt.QTableWidgetItem("")
-            it.setFlags(qt.Qt.ItemIsEnabled)
-            it.setBackground(qt.QColor(250, 250, 250))
             return it
 
         for r, row in enumerate(rows):
@@ -1430,16 +1415,18 @@ class PurkaitSinghGUI(qt.QWidget):
             type_item = qt.QTableWidgetItem(row["type"])
             type_item.setFlags(qt.Qt.ItemIsEnabled | qt.Qt.ItemIsSelectable)
 
-            # Data cells — blank ones use a subtle grey rather than "N/A"
-            def cell_for(v):
-                if v is None:
-                    return make_blank_cell()
-                return make_data_cell(v, row["true"], row["unit"])
+            sex_item = qt.QTableWidgetItem(row["sex"])
+            sex_item.setFlags(qt.Qt.ItemIsEnabled | qt.Qt.ItemIsSelectable)
 
-            c24m = cell_for(row["v2024M"])
-            c24f = cell_for(row["v2024F"])
-            c26m = cell_for(row["v2026M"])
-            c26f = cell_for(row["v2026F"])
+            v2024_item = qt.QTableWidgetItem(fmt(row["v2024"]))
+            v2024_item.setFlags(qt.Qt.ItemIsEnabled | qt.Qt.ItemIsSelectable)
+
+            d2024_item = make_diff(row["v2024"], row["true"], row["unit"])
+
+            v2026_item = qt.QTableWidgetItem(fmt(row["v2026"]))
+            v2026_item.setFlags(qt.Qt.ItemIsEnabled | qt.Qt.ItemIsSelectable)
+
+            d2026_item = make_diff(row["v2026"], row["true"], row["unit"])
 
             true_item = qt.QTableWidgetItem(fmt(row["true"]))
             true_item.setFlags(qt.Qt.ItemIsEnabled | qt.Qt.ItemIsSelectable)
@@ -1449,35 +1436,33 @@ class PurkaitSinghGUI(qt.QWidget):
             unit_item = qt.QTableWidgetItem(row["unit"])
             unit_item.setFlags(qt.Qt.ItemIsEnabled | qt.Qt.ItemIsSelectable)
 
-            # Light colour band by type
+            # Colour band by type
             t = row["type"]
             if t == "regression":
                 band = qt.QColor(255, 245, 220)
-                for it in (name_item, type_item):
+                for it in (name_item, type_item, v2024_item, v2026_item):
                     it.setBackground(band)
             elif t == "FSTT":
                 band = qt.QColor(235, 245, 255)
-                for it in (name_item, type_item):
+                for it in (name_item, type_item, v2024_item, v2026_item):
                     it.setBackground(band)
             elif t == "true-only":
                 band = qt.QColor(245, 255, 245)
                 for it in (name_item, type_item):
                     it.setBackground(band)
-            elif t == "input":
-                band = qt.QColor(245, 245, 245)
-                for it in (name_item, type_item):
-                    it.setBackground(band)
 
             self.measurementsTable.setItem(r, 0, name_item)
             self.measurementsTable.setItem(r, 1, type_item)
-            self.measurementsTable.setItem(r, 2, c24m)
-            self.measurementsTable.setItem(r, 3, c24f)
-            self.measurementsTable.setItem(r, 4, c26m)
-            self.measurementsTable.setItem(r, 5, c26f)
-            self.measurementsTable.setItem(r, 6, true_item)
-            self.measurementsTable.setItem(r, 7, unit_item)
+            self.measurementsTable.setItem(r, 2, sex_item)
+            self.measurementsTable.setItem(r, 3, v2024_item)
+            self.measurementsTable.setItem(r, 4, d2024_item)
+            self.measurementsTable.setItem(r, 5, v2026_item)
+            self.measurementsTable.setItem(r, 6, d2026_item)
+            self.measurementsTable.setItem(r, 7, true_item)
+            self.measurementsTable.setItem(r, 8, unit_item)
 
         self.measurementsTable.resizeColumnsToContents()
+
     # ==================== COPY ====================
 
     def onCopyCoordinates(self):
@@ -1513,9 +1498,9 @@ class PurkaitSinghGUI(qt.QWidget):
                 return
 
             export = "\t".join([
-                "Measurement", "Type",
-                "2024 M", "2024 F",
-                "2026 M", "2026 F",
+                "Measurement", "Type", "Sex",
+                "2024", "2024 Delta vs True",
+                "2026", "2026 Delta vs True",
                 "True", "Unit"
             ]) + "\n"
 
@@ -1556,9 +1541,9 @@ class PurkaitSinghGUI(qt.QWidget):
 
             blocks.append("=== TABLE 2 — MEASUREMENTS: CALCULATED vs TRUE ===")
             blocks.append("\t".join([
-                "Measurement", "Type",
-                "2024 M", "2024 F",
-                "2026 M", "2026 F",
+                "Measurement", "Type", "Sex",
+                "2024", "2024 Delta vs True",
+                "2026", "2026 Delta vs True",
                 "True", "Unit"
             ]))
             for r in range(self.measurementsTable.rowCount):
