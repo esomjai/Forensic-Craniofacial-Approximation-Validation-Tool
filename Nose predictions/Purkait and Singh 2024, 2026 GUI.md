@@ -82,6 +82,124 @@ class PurkaitSinghGUI(qt.QWidget):
         },
     }
 
+    def detectRunCombinations(self):
+        """Scan the scene for prn predictions and return a set of
+        (version, sex) combinations that were run. Also rebuilds
+        self.prn_predictions.
+
+        Recognises labels of the form:
+            prn_<sex>_<version>
+        plus tolerant variants such as 'prn_m_2024', 'prn_male_2024',
+        'prn_2024_male', 'prn_F_2026', etc.
+        """
+        import re
+
+        sex_aliases = {
+            "m": "male", "male": "male",
+            "f": "female", "female": "female",
+        }
+        version_aliases = {
+            "2024": "2024", "24": "2024",
+            "2026": "2026", "26": "2026",
+        }
+
+        # Look for prediction nodes under common names
+        pred_node = None
+        for name in ["lmrk_predictions", "predicted_landmarks",
+                     "predictions", "pred_landmarks"]:
+            node = slicer.util.getFirstNodeByName(name)
+            if node and "Fiducial" in node.GetClassName():
+                pred_node = node
+                break
+
+        self.prn_predictions = {}
+        combos = set()
+
+        if pred_node is None:
+            return combos
+
+        for i in range(pred_node.GetNumberOfControlPoints()):
+            label = pred_node.GetNthControlPointLabel(i)
+            if not label.lower().startswith("prn"):
+                continue
+
+            # tokenise: split on '_' or '-'
+            tokens = re.split(r"[_\-]+", label)
+            tokens = [t.lower() for t in tokens if t]
+
+            sex = None
+            version = None
+            for t in tokens:
+                if t in sex_aliases and sex is None:
+                    sex = sex_aliases[t]
+                if t in version_aliases and version is None:
+                    version = version_aliases[t]
+
+            if sex is None or version is None:
+                # Can't interpret this label; skip but note it
+                print("Skipping prediction label (unrecognised format): "
+                      "'{0}'".format(label))
+                continue
+
+            point = np.array(pred_node.GetNthControlPointPositionWorld(i))
+            self.prn_predictions[label] = {
+                "prn": point,
+                "predicted_distance": None,
+                "rhi_to_baseline_length": None,
+                "regression_sex": sex,
+                "study_version": version,
+            }
+            combos.add((version, sex))
+
+        print("Detected prediction combinations: {0}".format(sorted(combos)))
+        return combos
+
+    def preselectVersionFromScene(self):
+        """Set the Step 3 version radios and Step 4 sex radios to match
+        whatever combinations are actually present in the scene."""
+        combos = self.detectRunCombinations()
+        if not combos:
+            return
+
+        versions = {v for v, s in combos}
+        sexes    = {s for v, s in combos}
+
+        if versions == {"2024"}:
+            self.version2024Radio.setChecked(True)
+        elif versions == {"2026"}:
+            self.version2026Radio.setChecked(True)
+        elif versions == {"2024", "2026"}:
+            self.versionBothRadio.setChecked(True)
+
+        if sexes == {"male"}:
+            self.maleRadio.setChecked(True)
+        elif sexes == {"female"}:
+            self.femaleRadio.setChecked(True)
+        elif sexes == {"male", "female"}:
+            self.bothRadio.setChecked(True)
+
+    def isSceneComplete(self):
+        """True if every node required for the full report is present
+        in the scene."""
+        if self.hardTissueNode is None:
+            return False
+        if self.hardTissueNode.GetNumberOfControlPoints() < 8:
+            return False
+        if self.softTissueNode is None:
+            return False
+        if self.fhpNode is None:
+            return False
+        if self.mspNode is None:
+            return False
+
+        # Use detectRunCombinations() so we know which (version, sex)
+        # pairs are actually in the scene
+        combos = self.detectRunCombinations()
+        if not combos:
+            return False
+
+        return True
+
     def __init__(self, parent=None):
         qt.QWidget.__init__(self, parent)
         self.setWindowTitle("Purkait and Singh (2024; 2026) — prn prediction")
@@ -107,12 +225,30 @@ class PurkaitSinghGUI(qt.QWidget):
         self.setupNavigation()
 
         self.currentStep = 0
-
         self.syncWithScene()
+        self.rescanScene()
+        self.preselectVersionFromScene()
+        self.ensureFhpDetected()
         self.showDetectionSummary()
+
+        # If the entire pipeline output is already in the scene, jump straight
+        # to Step 5 so the user can refresh the report without re-running
+        # any of the earlier steps.
+        if self.isSceneComplete():
+            self.currentStep = 4                    # Step 5 (0-indexed)
+            self.updateResultsTables()              # populate tables now
+            self.step5StatusLabel.setText(
+                "Status: All nodes detected — comparisons populated. "
+                "Click 'Refresh Comparisons' to re-scan if the scene changes."
+            )
+            self.step5StatusLabel.setStyleSheet("color: green; font-weight: bold;")
+            print("Scene complete: jumping to Step 5 (Refresh Comparisons).")
+        else:
+            self.currentStep = 0
 
         self.updateStepUI()
 
+       
     def createAllStepWidgets(self):
         self.createStep1_Welcome()
         self.createStep2_PlaneSetup()
@@ -791,6 +927,9 @@ class PurkaitSinghGUI(qt.QWidget):
         try:
             if not self.hardTissueNode:
                 raise ValueError("Please select hard tissue landmarks first.")
+            self.ensureFhpDetected()   # <-- add this
+            if not self.fhpNode:
+                raise ValueError("Please create or select the FHP first.")
 
             self.step2StatusLabel.setText("Status: Creating MSP...")
             slicer.app.processEvents()
@@ -824,6 +963,7 @@ class PurkaitSinghGUI(qt.QWidget):
 
     def onCreateMeasurements(self):
         try:
+            self.ensureFhpDetected()
             if not all([self.hardTissueNode, self.mspNode, self.fhpNode]):
                 raise ValueError("Please complete previous steps first.")
 
@@ -952,6 +1092,7 @@ class PurkaitSinghGUI(qt.QWidget):
 
     def onRunPrediction(self):
         try:
+            self.ensureFhpDetected()
             existing = slicer.util.getFirstNodeByName('lmrk_predictions')
             if existing:
                 slicer.mrmlScene.RemoveNode(existing)
@@ -1019,100 +1160,170 @@ class PurkaitSinghGUI(qt.QWidget):
             slicer.util.errorDisplay("Failed to predict: {0}".format(str(e)))
 
     # ==================== VALIDATION ====================
-    def rescanScene(self):
-        """Re-detect the soft-tissue landmarks and any predicted-landmark
-        nodes present in the scene, and refresh the internal references.
+    def ensureFhpDetected(self):
+        """If self.fhpNode is None, try to find an FHP plane in the scene by name.
+        Returns the FHP node (or None). Updates self.fhpNode and the selector."""
+        if self.fhpNode is not None:
+            return self.fhpNode
 
-        Called when the user clicks 'Refresh Comparisons' so that any
-        changes made outside the GUI (reloading PS_soft_tissue, replacing
-        lmrk_predictions, moving fiducials) are picked up.
+        candidates = ["FHP", "fhp", "Frankfurt", "frankfurt",
+                      "Frankfort", "frankfort", "FH", "fh",
+                      "Frankfurt Horizontal", "frankfurt horizontal",
+                      "Frankfurt Horizontal Plane", "FHP plane", "fhp plane"]
+        for name in candidates:
+            node = slicer.util.getFirstNodeByName(name)
+            if node and "Plane" in node.GetClassName():
+                self.fhpNode = node
+                if hasattr(self, 'fhpSelector'):
+                    self.fhpSelector.setCurrentNode(node)
+                if hasattr(self, 'step2StatusLabel'):
+                    self.updateStep2Status()
+                print("Detected FHP: '{0}'".format(name))
+                return node
+
+        # ---- Safety net ----
+        # No FHP matched by name. If other markups planes exist in the scene,
+        # print a helpful note so the user knows why detection failed.
+        plane_nodes = slicer.util.getNodesByClass("vtkMRMLMarkupsPlaneNode")
+        if plane_nodes:
+            print("Note: {0} markups plane(s) exist in the scene, but none match "
+                  "the FHP naming convention. Please select the FHP manually in "
+                  "Step 2.".format(len(plane_nodes)))
+        return None
+
+    def rescanScene(self, redrawLines=False):
+        """Re-detect nodes present in the scene and rebuild the internal
+        dictionaries so results can be reported without re-running the
+        workflow. Called at startup and on 'Refresh Comparisons'.
+
+        If redrawLines is True, also recreate the visible scene lines
+        (FHP guide, baseline, AB, CD, etc.). Normally False for a simple
+        refresh; True only if the user explicitly wants the scene rebuilt.
         """
-        # --- Soft tissue ---
-        soft_names = ["PS_soft_tissue", "soft_tissue", "Soft_tissue",
-                      "soft", "Soft Tissue", "SoftTissue"]
-        soft = None
-        for name in soft_names:
-            node = slicer.util.getFirstNodeByName(name)
-            if node:
-                soft = node
-                break
-        self.softTissueNode = soft
-        if hasattr(self, 'softTissueSelector'):
-            self.softTissueSelector.setCurrentNode(soft)
+        # ---------- Node detection ----------
+        def find_first(names, classes=None):
+            for name in names:
+                node = slicer.util.getFirstNodeByName(name)
+                if node and (classes is None or node.GetClassName() in classes):
+                    return node
+            return None
 
-        # --- Hard tissue ---
-        hard_names = ["PS_hard_tissue", "hard_tissue", "Hard_tissue",
-                      "hard", "Hard Tissue", "HardTissue"]
-        hard = None
-        for name in hard_names:
-            node = slicer.util.getFirstNodeByName(name)
-            if node:
-                hard = node
-                break
-        self.hardTissueNode = hard
-        if hasattr(self, 'hardTissueSelector'):
-            self.hardTissueSelector.setCurrentNode(hard)
+        self.hardTissueNode = find_first(
+            ["PS_hard_tissue", "hard_tissue", "Hard_tissue", "hard", "Hard Tissue", "HardTissue"],
+            classes=["vtkMRMLMarkupsFiducialNode"]
+        )
+        self.softTissueNode = find_first(
+            ["PS_soft_tissue", "soft_tissue", "Soft_tissue", "soft", "Soft Tissue", "SoftTissue"],
+            classes=["vtkMRMLMarkupsFiducialNode"]
+        )
+        self.mspNode = find_first(
+            ["MSP", "msp", "Midsagittal", "midsagittal", "Mid-Sagittal", "mid-sagittal"],
+            classes=["vtkMRMLMarkupsPlaneNode"]
+        )
+        # Try a broad list first, then fall back to the ensure helper
+        self.fhpNode = None
+        self.fhpNode = find_first(
+            ["FHP", "fhp", "Frankfurt", "frankfurt", "Frankfort", "frankfort",
+             "FH", "fh", "Frankfurt Horizontal", "frankfurt horizontal",
+             "Frankfurt Horizontal Plane", "FHP plane", "fhp plane"],
+            classes=["vtkMRMLMarkupsPlaneNode"]
+        )
+        if self.fhpNode is None:
+            # ensureFhpDetected also sets the selector and updates Step 2 status
+            self.ensureFhpDetected()
 
-        # --- Predicted landmark node ---
-        # The GUI writes predictions to a node called 'lmrk_predictions'.
-        # If the user has renamed it or loaded a different one, try common
-        # variants. If nothing is found, leave self.prn_predictions as is.
-        pred_names = ["lmrk_predictions", "predicted_landmarks",
-                      "predictions", "pred_landmarks"]
-        pred_node = None
-        for name in pred_names:
-            node = slicer.util.getFirstNodeByName(name)
-            if node and "Fiducial" in node.GetClassName():
-                pred_node = node
-                break
+        # Sync UI widgets
+        if hasattr(self, 'hardTissueSelector') and self.hardTissueNode:
+            self.hardTissueSelector.setCurrentNode(self.hardTissueNode)
+        if hasattr(self, 'softTissueSelector') and self.softTissueNode:
+            self.softTissueSelector.setCurrentNode(self.softTissueNode)
+        if hasattr(self, 'fhpSelector') and self.fhpNode:
+            self.fhpSelector.setCurrentNode(self.fhpNode)
+        if hasattr(self, 'step1StatusLabel') and self.hardTissueNode:
+            self.step1StatusLabel.setText(
+                "Status: Hard tissue detected ({0}).".format(self.hardTissueNode.GetName()))
+            self.step1StatusLabel.setStyleSheet("color: green; font-weight: bold;")
+        if hasattr(self, 'step5StatusLabel') and self.softTissueNode:
+            self.step5StatusLabel.setText(
+                "Status: Soft tissue detected ({0}).".format(self.softTissueNode.GetName()))
+            self.step5StatusLabel.setStyleSheet("color: green; font-weight: bold;")
+        if hasattr(self, 'step2StatusLabel'):
+            self.updateStep2Status()
 
-        if pred_node is not None:
-            # Rebuild self.prn_predictions from the actual fiducial positions,
-            # so that any manual edits or reloaded predictions are reflected.
-            self.prn_predictions = {}
-            for i in range(pred_node.GetNumberOfControlPoints()):
-                label = pred_node.GetNthControlPointLabel(i)
-                # Expect labels like "prn_male_2024" or "prn_female_2026"
-                if not label.startswith("prn_"):
-                    continue
-                parts = label.split("_")
-                if len(parts) < 3:
-                    continue
-                sex = parts[1]
-                version = parts[2]
-                point = np.array(pred_node.GetNthControlPointPositionWorld(i))
-                self.prn_predictions[label] = {
-                    "prn": point,
-                    "predicted_distance": None,   # not stored on the node
-                    "rhi_to_baseline_length": None,
-                    "regression_sex": sex,
-                    "study_version": version,
-                }
+        # ---------- Rebuild measurement dictionary ----------
+        # The measurements are deterministic given the landmarks, so we can
+        # recompute them from scratch without needing the scene lines.
+        self.all_measurements = {}
+        if self.hardTissueNode and self.hardTissueNode.GetNumberOfControlPoints() >= 8:
+            self._recomputeHardTissueMeasurements()
+            if redrawLines and self.mspNode and self.fhpNode:
+                self._redrawMeasurementLines()
 
-        # Print a short summary so the user can see what was picked up
-        print("Scene rescan:")
-        print("  hard tissue:      {0}".format(
+        # ---------- Rebuild prn predictions from lmrk_predictions node ----------
+        self.detectRunCombinations()
+
+        # ---------- Summary ----------
+        print("Scene rescan complete:")
+        print("  hard tissue node:   {0}".format(
             self.hardTissueNode.GetName() if self.hardTissueNode else "None"))
-        print("  soft tissue:      {0}".format(
+        print("  soft tissue node:   {0}".format(
             self.softTissueNode.GetName() if self.softTissueNode else "None"))
-        print("  predicted count:  {0}".format(len(self.prn_predictions)))
+        print("  MSP node:           {0}".format(
+            self.mspNode.GetName() if self.mspNode else "None"))
+        print("  FHP node:           {0}".format(
+            self.fhpNode.GetName() if self.fhpNode else "None"))
+        print("  measurements:       {0}".format(len(self.all_measurements)))
+        print("  prn predictions:    {0}".format(len(self.prn_predictions)))
+
+    def _recomputeHardTissueMeasurements(self):
+        """Recompute the hard-tissue measurements from the landmark node.
+        Mirrors the geometry in onCreateMeasurements() but does not draw lines.
+        """
+        node = self.hardTissueNode
+        try:
+            n_pt    = self.getPoint(node, 0)
+            rhi_pt  = self.getPoint(node, 1)
+            ss_pt   = self.getPoint(node, 2)
+            ans_pt  = self.getPoint(node, 3)
+            a_pt    = self.getPoint(node, 4)
+            b_pt    = self.getPoint(node, 5)
+            c_pt    = self.getPoint(node, 6)
+            d_pt    = self.getPoint(node, 7)
+        except Exception as e:
+            print("Cannot recompute measurements: {0}".format(e))
+            return
+
+        # baseline (n -> ANS)
+        baseline_vec = ans_pt - n_pt
+        baseline_len = float(np.linalg.norm(baseline_vec))
+        self.storeMeasurement("bony n-ans (baseline)", baseline_len)
+
+        # bony n-rhi
+        self.storeMeasurement("bony n-rhi", float(np.linalg.norm(rhi_pt - n_pt)))
+
+        # bony rhi perpendicular to baseline
+        baseline_unit = baseline_vec / baseline_len if baseline_len > 1e-9 else baseline_vec
+        v = rhi_pt - n_pt
+        proj_len = float(np.dot(v, baseline_unit))
+        closest = n_pt + proj_len * baseline_unit
+        self.storeMeasurement("bony rhi perp baseline", float(np.linalg.norm(rhi_pt - closest)))
+
+        # AB, CD
+        self.storeMeasurement("AB", float(np.linalg.norm(b_pt - a_pt)))
+        self.storeMeasurement("CD", float(np.linalg.norm(d_pt - c_pt)))
+
+        # bony n-ss
+        self.storeMeasurement("bony n-ss (measured)", float(np.linalg.norm(ss_pt - n_pt)))
 
     def onCalculateErrors(self):
         try:
-            # Re-detect any landmark / prediction nodes that may have been
-            # added, reloaded or replaced in the scene since the widget was
-            # opened. This also refreshes the node-combobox selections.
-            self.rescanScene()
-
-            # Rebuild both result tables with the freshly-detected data.
+            self.rescanScene(redrawLines=False)
             self.updateResultsTables()
-
             self.step5StatusLabel.setText(
                 "Status: Scene re-scanned. Comparisons refreshed."
             )
             self.step5StatusLabel.setStyleSheet("color: green; font-weight: bold;")
             slicer.util.showStatusMessage("Comparisons refreshed.", 3000)
-
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -1342,13 +1553,15 @@ class PurkaitSinghGUI(qt.QWidget):
         rows = []
 
         # --- 1. Input (hard-tissue) measurements ---
+        # These are physical measurements of the hard tissue, not predictions.
+        # They are shown only in the True column; version/sex cells stay blank.
         input_keys = [
-            ("bony n-ans (baseline)",          "bony n-ans (baseline)"),
-            ("bony n-rhi",                     "bony n-rhi"),
-            ("bony rhi perp baseline",         "bony rhi perp baseline"),
-            ("AB",                             "AB"),
-            ("CD",                             "CD"),
-            ("bony n-ss (measured)",           "bony n-ss (measured)"),
+            ("bony n-ans (baseline)",  "bony n-ans (baseline)"),
+            ("bony n-rhi",             "bony n-rhi"),
+            ("bony rhi perp baseline", "bony rhi perp baseline"),
+            ("AB",                     "AB"),
+            ("CD",                     "CD"),
+            ("bony n-ss (measured)",   "bony n-ss (measured)"),
         ]
         for key, label in input_keys:
             if key in self.all_measurements:
@@ -1356,10 +1569,9 @@ class PurkaitSinghGUI(qt.QWidget):
                 rows.append({
                     "name": label,
                     "type": "input",
-                    # Same value shown in all four version/sex cells: physical measurement
-                    "v2024M": v, "v2024F": v,
-                    "v2026M": v, "v2026F": v,
-                    "true": None,
+                    "v2024M": None, "v2024F": None,
+                    "v2026M": None, "v2026F": None,
+                    "true": v,           # <- measured value goes here
                     "unit": self.all_measurements[key]["unit"],
                 })
 
