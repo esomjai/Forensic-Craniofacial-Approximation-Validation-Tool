@@ -81,7 +81,43 @@ class PurkaitSinghGUI(qt.QWidget):
             "sn":  {"male": 12.17, "female": 10.12},
         },
     }
+    def _tryAutoJump(self):
+        """Re-scan and jump to Step 5 if the scene is now complete.
+        Called from a QTimer so asynchronous scene loading can finish first."""
+        # Re-scan the scene for any nodes that appeared after __init__
+        self.rescanScene()
+        self.ensureFhpDetected()
+        self.preselectVersionFromScene()
 
+        print("=== Scene completeness check ===")
+        print("  hardTissueNode:  {0}  (points: {1})".format(
+            self.hardTissueNode.GetName() if self.hardTissueNode else None,
+            self.hardTissueNode.GetNumberOfControlPoints() if self.hardTissueNode else 0))
+        print("  softTissueNode:  {0}".format(
+            self.softTissueNode.GetName() if self.softTissueNode else None))
+        print("  fhpNode:         {0}".format(
+            self.fhpNode.GetName() if self.fhpNode else None))
+        print("  mspNode:         {0}".format(
+            self.mspNode.GetName() if self.mspNode else None))
+        print("  prn predictions: {0}".format(len(self.prn_predictions)))
+        print("  isSceneComplete: {0}".format(self.isSceneComplete()))
+
+        if not self.isSceneComplete():
+            print("Auto-jump: scene not yet complete.")
+            return
+
+        if self.currentStep == 4:
+            return  # already there
+
+        print("Auto-jump: scene complete — jumping to Step 5.")
+        self.currentStep = 4
+        self.updateResultsTables()
+        self.step5StatusLabel.setText(
+            "Status: All nodes detected — comparisons populated. "
+            "Click 'Refresh Comparisons' to re-scan if the scene changes."
+        )
+        self.step5StatusLabel.setStyleSheet("color: green; font-weight: bold;")
+        self.updateStepUI()
     def detectRunCombinations(self):
         """Scan the scene for prn predictions and return a set of
         (version, sex) combinations that were run. Also rebuilds
@@ -224,29 +260,25 @@ class PurkaitSinghGUI(qt.QWidget):
         self.createAllStepWidgets()
         self.setupNavigation()
 
+        # Initialise the step counter before anything that uses it
         self.currentStep = 0
+
         self.syncWithScene()
         self.rescanScene()
-        self.preselectVersionFromScene()
         self.ensureFhpDetected()
+        self.preselectVersionFromScene()
         self.showDetectionSummary()
 
-        # If the entire pipeline output is already in the scene, jump straight
-        # to Step 5 so the user can refresh the report without re-running
-        # any of the earlier steps.
-        if self.isSceneComplete():
-            self.currentStep = 4                    # Step 5 (0-indexed)
-            self.updateResultsTables()              # populate tables now
-            self.step5StatusLabel.setText(
-                "Status: All nodes detected — comparisons populated. "
-                "Click 'Refresh Comparisons' to re-scan if the scene changes."
-            )
-            self.step5StatusLabel.setStyleSheet("color: green; font-weight: bold;")
-            print("Scene complete: jumping to Step 5 (Refresh Comparisons).")
-        else:
-            self.currentStep = 0
+        # Scene restoration may still be in progress; check again shortly.
+        # Several timers cover slow .mrb loads.
+        qt.QTimer.singleShot(500,   self._tryAutoJump)
+        qt.QTimer.singleShot(1500,  self._tryAutoJump)
+        qt.QTimer.singleShot(3000,  self._tryAutoJump)
+        qt.QTimer.singleShot(6000,  self._tryAutoJump)
+        qt.QTimer.singleShot(10000, self._tryAutoJump)
 
         self.updateStepUI()
+
 
        
     def createAllStepWidgets(self):
@@ -1161,34 +1193,61 @@ class PurkaitSinghGUI(qt.QWidget):
 
     # ==================== VALIDATION ====================
     def ensureFhpDetected(self):
-        """If self.fhpNode is None, try to find an FHP plane in the scene by name.
-        Returns the FHP node (or None). Updates self.fhpNode and the selector."""
+        """If self.fhpNode is None, find an FHP plane in the scene.
+
+        Iterates plane nodes directly rather than relying on name lookup,
+        because slicer.util.getFirstNodeByName can miss nodes during scene
+        loading even when they are present.
+        """
         if self.fhpNode is not None:
             return self.fhpNode
 
-        candidates = ["FHP", "fhp", "Frankfurt", "frankfurt",
-                      "Frankfort", "frankfort", "FH", "fh",
-                      "Frankfurt Horizontal", "frankfurt horizontal",
-                      "Frankfurt Horizontal Plane", "FHP plane", "fhp plane"]
-        for name in candidates:
-            node = slicer.util.getFirstNodeByName(name)
-            if node and "Plane" in node.GetClassName():
+        all_planes = slicer.util.getNodesByClass("vtkMRMLMarkupsPlaneNode")
+        if not all_planes:
+            return None
+
+        # Normalise the candidate list to lowercase stripped strings
+        candidates_lower = {
+            "fhp", "frankfurt", "frankfort", "fh",
+            "frankfurt horizontal", "frankfurt horizontal plane",
+            "fhp plane",
+        }
+
+        # 1. Exact / case-insensitive match against the candidate names
+        for node in all_planes:
+            name = node.GetName()
+            if name is None:
+                continue
+            if name.strip().lower() in candidates_lower:
                 self.fhpNode = node
                 if hasattr(self, 'fhpSelector'):
                     self.fhpSelector.setCurrentNode(node)
                 if hasattr(self, 'step2StatusLabel'):
                     self.updateStep2Status()
-                print("Detected FHP: '{0}'".format(name))
+                print("Detected FHP by name: '{0}'".format(name))
                 return node
 
-        # ---- Safety net ----
-        # No FHP matched by name. If other markups planes exist in the scene,
-        # print a helpful note so the user knows why detection failed.
-        plane_nodes = slicer.util.getNodesByClass("vtkMRMLMarkupsPlaneNode")
-        if plane_nodes:
-            print("Note: {0} markups plane(s) exist in the scene, but none match "
-                  "the FHP naming convention. Please select the FHP manually in "
-                  "Step 2.".format(len(plane_nodes)))
+        # 2. Fallback: exactly one non-MSP plane exists, so it must be the FHP
+        msp_names = {"msp", "midsagittal", "mid-sagittal", "mid_sagittal"}
+        non_msp_planes = [p for p in all_planes
+                          if p.GetName() is not None
+                          and p.GetName().strip().lower() not in msp_names]
+        if len(non_msp_planes) == 1:
+            node = non_msp_planes[0]
+            self.fhpNode = node
+            if hasattr(self, 'fhpSelector'):
+                self.fhpSelector.setCurrentNode(node)
+            if hasattr(self, 'step2StatusLabel'):
+                self.updateStep2Status()
+            print("Detected FHP by exclusion (only non-MSP plane): '{0}'".format(node.GetName()))
+            return node
+
+        # 3. Safety net — no match. Report what is present so the user
+        # can diagnose.
+        names = [p.GetName() for p in all_planes]
+        print("Note: {0} plane(s) exist ({1}), but none match the FHP "
+              "naming convention. Please select the FHP manually in "
+              "Step 2.".format(len(all_planes), names))
         return None
 
     def rescanScene(self, redrawLines=False):
