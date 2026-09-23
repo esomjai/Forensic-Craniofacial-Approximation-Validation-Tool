@@ -51,12 +51,16 @@ class ThreefoldANSGUI(qt.QWidget):
         # Cylinder radius - default 2.0 mm (also used as search radius)
         self.cylinderRadius = 2.0
         
+        # IMPORTANT: must exist before syncWithScene(), because syncWithScene()
+        # indirectly calls updateStepUI() which reads self.currentStep.
+        self.currentStep = 0
+        
         self.createAllStepWidgets()
         self.setupNavigation()
         self.checkDependencies()
         self.syncWithScene()
         
-        # Initial step detection (only once)
+        # Now that the scene is synced, detect the real step.
         self.currentStep = self.determineCurrentStep()
         self.updateStepUI()
         
@@ -1999,4 +2003,5 @@ except Exception as e:
 
 threefoldGui = ThreefoldANSGUI()
 threefoldGui.show()
+
 ```
