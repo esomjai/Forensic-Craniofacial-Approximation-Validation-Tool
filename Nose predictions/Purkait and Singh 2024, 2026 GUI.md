@@ -913,14 +913,58 @@ class PurkaitSinghGUI(qt.QWidget):
     def storeMeasurement(self, name, value, unit="mm"):
         self.all_measurements[name] = {"value": float(value), "unit": unit}
 
+    # Author-attribution tokens — the node name must contain one of these
+    HARD_TISSUE_AUTHOR_TOKENS = [
+        "ps", "sp", "p&s", "s&p",
+        "pands", "sandp",
+        "p and s", "s and p",
+        "purkait", "singh",
+    ]
+    # Tokens that mark the node as a HARD-tissue node
+    HARD_TISSUE_HARD_TOKENS = [
+        "hard", "hardtissue", "hard_tissue", "hard tissue",
+    ]
+
+    def _isValidHardTissueNode(self, node):
+        """Accept only nodes whose name:
+          (a) contains a Purkait & Singh author token (ps, sp, p&s, s&p,
+              pands, sandp, 'p and s', 's and p', purkait, singh), AND
+          (b) contains a hard-tissue marker (hard / hard_tissue / etc.).
+        This rejects foreign landmark sets such as 'Ryu_hard_tissue'."""
+        if node is None:
+            return False
+        if "Fiducial" not in node.GetClassName():
+            return False
+
+        try:
+            name_lower = node.GetName().lower()
+        except Exception:
+            return False
+
+        has_author = any(tok in name_lower for tok in self.HARD_TISSUE_AUTHOR_TOKENS)
+        has_hard   = any(tok in name_lower for tok in self.HARD_TISSUE_HARD_TOKENS)
+
+        return has_author and has_hard
+
     def onHardTissueSelected(self, node):
-        if node:
-            self.hardTissueNode = node
-            self.step1StatusLabel.setText("Status: Selected '{0}'.".format(node.GetName()))
-            self.step1StatusLabel.setStyleSheet("color: green; font-weight: bold;")
+        if node and not self._isValidHardTissueNode(node):
+            # Reject the selection and revert to whatever was set before
+            self.hardTissueSelector.setCurrentNode(self.hardTissueNode)
+            self.step1StatusLabel.setText(
+                "Status: '{0}' rejected — not a hard-tissue landmark node.".format(node.GetName()))
+            self.step1StatusLabel.setStyleSheet("color: orange; font-weight: bold;")
+            return
+            # A node was selected, but it isn't a valid hard-tissue node.
+            self.hardTissueNode = None
+            self.step1StatusLabel.setText(
+                "Status: '{0}' is not a valid hard-tissue landmark node. "
+                "Expected 'PS_hard_tissue' (or a node containing the 8 "
+                "landmarks n, rhi, ss, ANS, A, B, C, D).".format(node.GetName()))
+            self.step1StatusLabel.setStyleSheet("color: orange; font-weight: bold;")
         else:
             self.hardTissueNode = None
-            self.step1StatusLabel.setText("Status: Download landmarks or select 'PS_hard_tissue' node.")
+            self.step1StatusLabel.setText(
+                "Status: Download landmarks or select 'PS_hard_tissue' node.")
             self.step1StatusLabel.setStyleSheet("")
 
     def onFHPSelected(self, node):
