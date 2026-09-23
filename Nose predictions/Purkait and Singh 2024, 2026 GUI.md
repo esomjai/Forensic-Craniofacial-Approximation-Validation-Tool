@@ -1,4 +1,4 @@
-```python
+```ptyhon
 import numpy as np
 import slicer
 import qt
@@ -799,16 +799,23 @@ class PurkaitSinghGUI(qt.QWidget):
         self.stepStack.addWidget(container)
 
     # ==================== SCENE SYNC ====================
-
     def syncWithScene(self):
         possible_hard_names = ["PS_hard_tissue", "hard_tissue", "Hard_tissue", "hard", "Hard Tissue", "HardTissue"]
+        self.hardTissueNode = None
         for name in possible_hard_names:
             node = slicer.util.getFirstNodeByName(name)
-            if node:
+            if node and self._isValidHardTissueNode(node):
                 self.hardTissueNode = node
                 self.hardTissueSelector.setCurrentNode(node)
                 print("Auto-detected hard tissue: '{0}'".format(name))
                 break
+
+        # The combo box can auto-select the first fiducial node it sees.
+        # If it did so with an invalid one, clear it.
+        current = self.hardTissueSelector.currentNode()
+        if current is not None and not self._isValidHardTissueNode(current):
+            self.hardTissueSelector.setCurrentNode(None)
+            self.hardTissueNode = None
 
         possible_msp_names = ["MSP", "msp", "Midsagittal", "midsagittal", "Mid-Sagittal", "mid-sagittal"]
         for name in possible_msp_names:
@@ -856,9 +863,14 @@ class PurkaitSinghGUI(qt.QWidget):
             print("=" * 50 + "\n")
             slicer.util.showStatusMessage("Auto-detection complete.", 3000)
 
-            if self.hardTissueNode:
-                self.step1StatusLabel.setText("Status: Hard tissue detected.")
+            if self.hardTissueNode and self._isValidHardTissueNode(self.hardTissueNode):
+                self.step1StatusLabel.setText(
+                    "Status: Hard tissue detected ({0}).".format(self.hardTissueNode.GetName()))
                 self.step1StatusLabel.setStyleSheet("color: green; font-weight: bold;")
+            else:
+                self.step1StatusLabel.setText(
+                    "Status: No valid Purkait & Singh hard-tissue node in scene.")
+                self.step1StatusLabel.setStyleSheet("")
         else:
             print("No existing nodes detected. Please load or create landmarks.")
 
@@ -947,26 +959,24 @@ class PurkaitSinghGUI(qt.QWidget):
         return has_author and has_hard
 
     def onHardTissueSelected(self, node):
-        if node and not self._isValidHardTissueNode(node):
-            # Reject the selection and revert to whatever was set before
-            self.hardTissueSelector.setCurrentNode(self.hardTissueNode)
-            self.step1StatusLabel.setText(
-                "Status: '{0}' rejected — not a hard-tissue landmark node.".format(node.GetName()))
-            self.step1StatusLabel.setStyleSheet("color: orange; font-weight: bold;")
-            return
-            # A node was selected, but it isn't a valid hard-tissue node.
-            self.hardTissueNode = None
-            self.step1StatusLabel.setText(
-                "Status: '{0}' is not a valid hard-tissue landmark node. "
-                "Expected 'PS_hard_tissue' (or a node containing the 8 "
-                "landmarks n, rhi, ss, ANS, A, B, C, D).".format(node.GetName()))
-            self.step1StatusLabel.setStyleSheet("color: orange; font-weight: bold;")
-        else:
+        if node is None:
             self.hardTissueNode = None
             self.step1StatusLabel.setText(
                 "Status: Download landmarks or select 'PS_hard_tissue' node.")
             self.step1StatusLabel.setStyleSheet("")
-
+        elif self._isValidHardTissueNode(node):
+            self.hardTissueNode = node
+            self.step1StatusLabel.setText(
+                "Status: Selected '{0}'.".format(node.GetName()))
+            self.step1StatusLabel.setStyleSheet("color: green; font-weight: bold;")
+        else:
+            # Reject — revert the combo box to whatever was previously valid
+            self.hardTissueSelector.setCurrentNode(self.hardTissueNode)
+            self.step1StatusLabel.setText(
+                "Status: '{0}' rejected — not a Purkait & Singh hard-tissue node."
+                .format(node.GetName()))
+            self.step1StatusLabel.setStyleSheet("color: orange; font-weight: bold;")
+            
     def onFHPSelected(self, node):
         if node:
             self.fhpNode = node
@@ -1311,10 +1321,20 @@ class PurkaitSinghGUI(qt.QWidget):
                     return node
             return None
 
-        self.hardTissueNode = find_first(
+        candidate = find_first(
             ["PS_hard_tissue", "hard_tissue", "Hard_tissue", "hard", "Hard Tissue", "HardTissue"],
             classes=["vtkMRMLMarkupsFiducialNode"]
         )
+        if candidate is not None and self._isValidHardTissueNode(candidate):
+            self.hardTissueNode = candidate
+        else:
+            self.hardTissueNode = None
+
+        # If the combo box is holding an invalid node, clear it too.
+        if hasattr(self, 'hardTissueSelector'):
+            current = self.hardTissueSelector.currentNode()
+            if current is not None and not self._isValidHardTissueNode(current):
+                self.hardTissueSelector.setCurrentNode(None)
         self.softTissueNode = find_first(
             ["PS_soft_tissue", "soft_tissue", "Soft_tissue", "soft", "Soft Tissue", "SoftTissue"],
             classes=["vtkMRMLMarkupsFiducialNode"]
@@ -2002,5 +2022,4 @@ class PurkaitSinghGUI(qt.QWidget):
 # Create and show the widget
 widget = PurkaitSinghGUI()
 widget.show()
-
 ```
