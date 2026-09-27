@@ -1,4 +1,4 @@
-If the projected view of landmarks drive you insane like the drive me insane, use this code once all landmarks are loaded in the scene. 
+If the projected view of landmarks drive you insane (as much as they drive me insane by cluttering my multiplanar view), use this code once all landmarks are loaded in the scene. 
 
 
 ```python
