@@ -9,15 +9,33 @@ import slicer
 import urllib.request
 import tempfile
 
-class ThreefoldANSGUI(qt.QWidget):
+
+
+class ThreefoldANSGUI(qt.QDialog):
     def __init__(self, parent=None):
-        qt.QWidget.__init__(self, parent)
+        qt.QDialog.__init__(self, parent)
         self.setWindowTitle("Threefold ANS Method")
         self.setObjectName("ThreefoldANSGUI")
-        
-        self.mainLayout = qt.QVBoxLayout(self)
+        # Outer layout: holds scroll area (top) + nav footer (bottom)
+        self.outerLayout = qt.QVBoxLayout(self)
+        self.outerLayout.setContentsMargins(0, 0, 0, 0)
+        self.outerLayout.setSpacing(0)
+
+        # Scroll area: only the step content scrolls
+        self.scrollArea = qt.QScrollArea()
+        self.scrollArea.setWidgetResizable(True)
+        self.scrollArea.setHorizontalScrollBarPolicy(qt.Qt.ScrollBarAsNeeded)
+        self.scrollArea.setVerticalScrollBarPolicy(qt.Qt.ScrollBarAsNeeded)
+        self.outerLayout.addWidget(self.scrollArea, 1)   # stretch=1 → takes all vertical space left over
+
+        # Content widget inside the scroll area
+        self.contentWidget = qt.QWidget()
+        self.scrollArea.setWidget(self.contentWidget)
+
+        self.mainLayout = qt.QVBoxLayout(self.contentWidget)
         self.mainLayout.setSpacing(10)
-        
+        self.mainLayout.setContentsMargins(10, 10, 10, 10)
+
         self.stepStack = qt.QStackedWidget()
         self.mainLayout.addWidget(self.stepStack)
         
@@ -63,8 +81,10 @@ class ThreefoldANSGUI(qt.QWidget):
         # Now that the scene is synced, detect the real step.
         self.currentStep = self.determineCurrentStep()
         self.updateStepUI()
-        
-        # No scene observers – manual navigation only
+
+        self.setMinimumSize(500, 400)   # small minimum so it can shrink
+        self.resize(600, 750)           # comfortable starting size
+
 
     def createAllStepWidgets(self):
         self.createStep1_Welcome()
@@ -123,7 +143,10 @@ class ThreefoldANSGUI(qt.QWidget):
         navLayout.addWidget(self.stepLabel)
         navLayout.addStretch(1)
         navLayout.addWidget(self.nextButton)
-        self.mainLayout.addWidget(navWidget)
+        
+        self.outerLayout.addWidget(navWidget)
+        navWidget.setContentsMargins(10, 6, 10, 10)
+        
 
     # ==================== AUTO STEP DETECTION (for initial and validation only) ====================
     def determineCurrentStep(self):
@@ -354,16 +377,23 @@ class ThreefoldANSGUI(qt.QWidget):
         volTitle.setWordWrap(True)
         volLayout.addWidget(volTitle)
 
-        volDesc = qt.QLabel(
-            "You will use the CT volume directly — no bone model is needed.\n\n"
-            "<b>Step 1:</b> Select your CT volume from the dropdown below.\n"
-            "<b>Step 2:</b> Click 'Open Volume Rendering' to visualise the skull (use the `Shift` toggle to exclude soft tissue).\n"
-            "<b>Step 3:</b> Use the Volume Rendering module ROI to cut the skull in half for placing the VMJ and the nasal spine line.\n"
-            "<b>Step 4:</b> Click 'Continue without model' to proceed.\n\n"
-            "⚠️ <b>Note:</b> The FSTT cylinder will be computed directly from the CT volume."
+        volDesc = qt.QLabel()
+        volDesc.setTextFormat(qt.Qt.RichText)
+        volDesc.setText(
+            "You will use the CT volume directly — no bone model is needed.<br><br>"
+            "<b>Step 1:</b> Select your CT volume from the dropdown below.<br>"
+            "<b>Step 2:</b> Click 'Open Volume Rendering' to visualise the skull (use the `Shift` toggle to exclude soft tissue).<br>"
+            "<b>Step 3:</b> Use the Volume Rendering module ROI to cut the skull in half for placing the VMJ and the nasal spine line.<br><br>"
+            "⚠️ <b>Note:</b> The FSTT cylinder will be computed directly from the CT volume. "
+            "Click <b>Next</b> at the bottom when you're done."
         )
         volDesc.setWordWrap(True)
-        volDesc.setStyleSheet("background-color: #FFF8E1; padding: 8px; border-radius: 5px;")
+        volDesc.setStyleSheet(
+            "background-color: #FFF8E1; "
+            "border: 1px solid #FFE082; "
+            "border-radius: 6px; "
+            "padding: 10px;"
+        )
         volLayout.addWidget(volDesc)
 
         # Volume selector
@@ -384,27 +414,30 @@ class ThreefoldANSGUI(qt.QWidget):
         self.openVolumeRenderingButton.setStyleSheet("background-color: #FF9800; color: white; font-weight: bold; padding: 8px;")
         self.openVolumeRenderingButton.clicked.connect(lambda: slicer.util.selectModule('VolumeRendering'))
         buttonRow.addWidget(self.openVolumeRenderingButton)
-
-        self.continueWithoutModelButton = qt.QPushButton("✅ Continue without model")
-        self.continueWithoutModelButton.setStyleSheet("background-color: #4CAF50; color: white; font-weight: bold; padding: 8px;")
-        self.continueWithoutModelButton.clicked.connect(self.onContinueWithoutModel)
-        buttonRow.addWidget(self.continueWithoutModelButton)
         volLayout.addLayout(buttonRow)
 
-        #Quick volume rendering instructions (collapsible)
+        # Quick volume rendering instructions (collapsible)
         volHelpButton = qt.QPushButton("📖 Show Volume Rendering Tips")
-        volHelpButton.setStyleSheet("background-color: #E3F2FD; color: #1565C0; padding: 5px;")
+        volHelpButton.setStyleSheet(
+            "background-color: #E3F2FD; color: #1565C0; padding: 6px; "
+            "border: 1px solid #90CAF9; border-radius: 4px;"
+        )
         volHelpButton.setCheckable(True)
-        volHelpButton.toggled.connect(lambda checked: volHelpContainer.setVisible(checked))
         volLayout.addWidget(volHelpButton)
 
         volHelpContainer = qt.QWidget()
         volHelpContainer.setVisible(False)
+        volHelpContainer.setStyleSheet(
+            "background-color: #F5F5F5; "
+            "border: 1px solid #E0E0E0; "
+            "border-radius: 6px;"
+        )
         volHelpLayout = qt.QVBoxLayout(volHelpContainer)
-        volHelpLayout.setContentsMargins(10, 10, 10, 10)
-        volHelpContainer.setStyleSheet("background-color: #F5F5F5; border-radius: 5px;")
+        volHelpLayout.setContentsMargins(12, 12, 12, 12)
 
-        volTips = qt.QLabel(
+        volTips = qt.QLabel()
+        volTips.setTextFormat(qt.Qt.RichText)
+        volTips.setText(
             "<b>💡 Tips for Volume Rendering:</b><br><br>"
             "• <b>To see the current ROI:</b> In the Volume Rendering module, under 'Display', "
             "find the 'Crop' section and click the eye icon next to 'Display ROI' to make the ROI visible.<br><br>"
@@ -415,8 +448,12 @@ class ThreefoldANSGUI(qt.QWidget):
             "and close the eye icon for 'Display ROI'."
         )
         volTips.setWordWrap(True)
+        volTips.setStyleSheet("background: transparent; color: #333;")
         volHelpLayout.addWidget(volTips)
         volLayout.addWidget(volHelpContainer)
+
+        # Wire the toggle AFTER both widgets exist
+        volHelpButton.toggled.connect(lambda checked: volHelpContainer.setVisible(checked))
 
         mainLayout.addWidget(self.volumeContainer)
 
@@ -442,6 +479,7 @@ class ThreefoldANSGUI(qt.QWidget):
             self.volumeContainer.setVisible(False)
             self.step3StatusLabel.setText("Status: Follow the segmentation instructions above.")
             self.manualVolumeRendering = False
+            self.step4_skipped = False   # reset
 
     def onLoadModelToggled(self):
         if self.loadModelRadio.isChecked():
@@ -450,14 +488,18 @@ class ThreefoldANSGUI(qt.QWidget):
             self.volumeContainer.setVisible(False)
             self.step3StatusLabel.setText("Status: Load an existing model or import from file.")
             self.manualVolumeRendering = False
+            self.step4_skipped = False   # reset
 
     def onVolumeRenderToggled(self):
         if self.volumeRenderRadio.isChecked():
             self.segmentationContainer.setVisible(False)
             self.loadContainer.setVisible(False)
             self.volumeContainer.setVisible(True)
-            self.step3StatusLabel.setText("Status: Volume Rendering mode selected. Select a volume and click 'Continue'.")
+            self.step3StatusLabel.setText("Status: Volume Rendering mode selected. Select a volume, then click Next when ready.")
             self.manualVolumeRendering = True
+            # Clear any previously-confirmed bone model — volume mode doesn't use one
+            self.boneModel = None
+            self.step4_skipped = True
 
     def onVolumeSelectedVR(self, node):
         if node:
@@ -467,11 +509,7 @@ class ThreefoldANSGUI(qt.QWidget):
             self.volumeNode = None
             self.step3StatusLabel.setText("Status: Please select a volume or continue without one (will prompt later).")
 
-    def onContinueWithoutModel(self):
-        self.step3StatusLabel.setText("Status: Continuing without bone model. Prediction will use volume if available.")
-        self.manualVolumeRendering = True
-        # Move to next step manually (if user clicked this button, they want to proceed)
-        # We'll simulate a Next click.
+    
 
     # ------- Load existing model helpers -------
     def onLoadExistingModel(self):
@@ -1022,10 +1060,12 @@ class ThreefoldANSGUI(qt.QWidget):
         if self.referencePlane:
             self.step2StatusLabel.setText(f"Status: Found '{self.referencePlane.GetName()}'.")
 
-        self.boneModel = slicer.util.getFirstNodeByName("Bone")
+        # Only auto-detect a "Bone" node when NOT in volume-rendering mode.
+        if not self.manualVolumeRendering and self.boneModel is None:
+            self.boneModel = slicer.util.getFirstNodeByName("Bone")
         if self.boneModel:
             self.boneModelSelector.setCurrentNode(self.boneModel)
-
+            self.existingModelSelector.setCurrentNode(self.boneModel)
         if not self.volumeNode:
             vols = slicer.util.getNodesByClass("vtkMRMLScalarVolumeNode")
             for vol in vols:
@@ -1054,6 +1094,7 @@ class ThreefoldANSGUI(qt.QWidget):
             self.createMPGuideButton.setEnabled(False)
             self.adjustMPButton.setEnabled(True)
             self.confirmMPButton.setEnabled(True)
+            self.step6_complete = True   # ← add this line
             self.step6StatusLabel.setText("Status: Found existing 'mp' point. Please adjust and/or confirm.")
 
         self.predictedPronasaleNode = slicer.util.getFirstNodeByName("predicted pronasale")
@@ -1895,6 +1936,9 @@ class ThreefoldANSGUI(qt.QWidget):
     def onPrevButtonClicked(self):
         if self.currentStep > 0:
             self.currentStep -= 1
+            # Volume Rendering mode: skip back over Step 4
+            if self.currentStep == 3 and self.manualVolumeRendering and self.step4_skipped:
+                self.currentStep = 2
             self.updateStepUI(forceStep=self.currentStep)
 
     def onNextButtonClicked(self):
@@ -1937,8 +1981,11 @@ class ThreefoldANSGUI(qt.QWidget):
             return
 
         if self.currentStep < self.stepStack.count - 1:
-            self.currentStep += 1
-            self.updateStepUI(forceStep=self.currentStep)
+                self.currentStep += 1
+                # Volume Rendering mode: Step 4 (Cut Model) is skipped
+                if self.currentStep == 3 and self.manualVolumeRendering and self.step4_skipped:
+                    self.currentStep = 4
+                self.updateStepUI(forceStep=self.currentStep)
 
     def updateStepUI(self, forceStep=None):
         self.cleanup()
@@ -1948,7 +1995,6 @@ class ThreefoldANSGUI(qt.QWidget):
         # No auto-detection – keep current step
         
         self.stepStack.setCurrentIndex(self.currentStep)
-        self.stepLabel.setText(f"Step {self.currentStep + 1}/{self.stepStack.count}")
         self.prevButton.setEnabled(self.currentStep > 0)
         self.nextButton.setEnabled(self.currentStep < self.stepStack.count - 1)
         
@@ -1966,13 +2012,21 @@ class ThreefoldANSGUI(qt.QWidget):
                 self.vectorObserver = self.nasalSpineVector.AddObserver(
                     slicer.vtkMRMLMarkupsNode.PointModifiedEvent, self.onNasalSpineVectorModified
                 )
-        
+        total = self.stepStack.count
+        displayed = self.currentStep + 1
+        if self.manualVolumeRendering and self.step4_skipped:
+            total -= 1
+            if self.currentStep >= 4:
+                displayed -= 1
+        self.stepLabel.setText(f"Step {displayed}/{total}")
+
         if self.currentStep == 3:
             self.updateStep4UI()
         
         if self.currentStep == 6:
             self.updatePredictionUI()
-        
+        if self.currentStep == 8:
+            self.updateResultsTable()
         step_names = [
             "Load Landmarks",
             "Create Reference Plane",
@@ -1989,7 +2043,6 @@ class ThreefoldANSGUI(qt.QWidget):
             self.stepStatusLabel.setText(f"📍 Step {self.currentStep + 1}: {step_names[self.currentStep]}")
 
 
-# ====== Entry Point ======
 try:
     mainWindow = slicer.util.mainWindow()
     old_gui = mainWindow.findChild(qt.QWidget, "ThreefoldANSGUI")
@@ -1998,6 +2051,20 @@ try:
             old_gui.cleanup()
         old_gui.deleteLater()
         slicer.app.processEvents()
+except Exception as e:
+    print(f"Error during cleanup: {e}")
+
+try:
+    app = qt.QApplication.instance()
+    widgets_to_remove = [w for w in app.topLevelWidgets() if w.objectName == "ThreefoldANSGUI"]
+    for w in widgets_to_remove:
+        try:
+            if hasattr(w, 'cleanup'):
+                w.cleanup()
+            w.hide()
+            w.deleteLater()
+        except Exception as inner:
+            print(f"Failed to remove old GUI instance: {inner}")
 except Exception as e:
     print(f"Error during cleanup: {e}")
 
