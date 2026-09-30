@@ -1,4 +1,19 @@
 ```python
+class ShrinkableStack(qt.QStackedWidget):
+    """QStackedWidget that reports the current page's size hint,
+    not the maximum of all pages."""
+    def sizeHint(self):
+        w = self.currentWidget()
+        if w is not None:
+            return w.sizeHint()
+        return super().sizeHint()
+
+    def minimumSizeHint(self):
+        w = self.currentWidget()
+        if w is not None:
+            return w.minimumSizeHint()
+        return super().minimumSizeHint()
+
 class GerasimowNosePredictor(qt.QWidget):
     def __init__(self, parent=None):
         qt.QWidget.__init__(self, parent)
@@ -70,7 +85,7 @@ class GerasimowNosePredictor(qt.QWidget):
         scrollArea = qt.QScrollArea()
         scrollArea.setWidgetResizable(True)
         scrollArea.setMinimumHeight(150)
-        scrollArea.setSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Expanding)
+        scrollArea.setSizePolicy(qt.QSizePolicy.Preferred, qt.QSizePolicy.Preferred)
         
         scrollContent = qt.QWidget()
         scrollLayout = qt.QVBoxLayout(scrollContent)
@@ -78,7 +93,7 @@ class GerasimowNosePredictor(qt.QWidget):
         scrollLayout.setSpacing(10)
         
         # Step stack
-        self.stepStack = qt.QStackedWidget()
+        self.stepStack = ShrinkableStack()
         scrollLayout.addWidget(self.stepStack)
         
         # Status label
