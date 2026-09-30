@@ -106,9 +106,7 @@ class GerasimowNosePredictor(qt.QWidget):
         self.decisions = []
         self.log("Starting Two-Tangent Method")
         
-                self.decisions = []
-        self.log("Starting Gerasimow's nose prediction process")
-
+    
         # ==================== NODE STORAGE ====================
         self.landmarksNode = None
         self.planeNode = None
