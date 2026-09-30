@@ -1462,25 +1462,20 @@ class GerasimowNosePredictor(qt.QWidget):
                     "Tangents", "R2 Placement", "Results"]
         self.stepStatusLabel.setText(f"📍 Current: {step_names[self.currentStep]} - Follow instructions above")
 
-        # Resize the window to fit the current step's content.
-        # We can't rely on QStackedWidget's sizeHint (it returns the max
-        # of all pages), so we measure the current page directly.
+        # Resize the window to fit the current step's content
         current_page = self.stepStack.currentWidget()
         if current_page is not None:
             current_page.adjustSize()
-            step_height = current_page.sizeHint.height()
+            hint = current_page.sizeHint          # QSize
+            step_height = hint.height()           # int — slot call
 
-            # Budget for: top bar (~40) + nav (~40) + separator (~5)
-            # + status label (~45) + log (~35) + margins/padding (~40)
             chrome_height = 200
 
             total_height = step_height + chrome_height
-
-            # Clamp so the window never opens absurdly small or off-screen
             total_height = max(total_height, 400)
             total_height = min(total_height, 900)
 
-            self.mainWidget.resize(self.mainWidget.width(), total_height)
+            self.mainWidget.resize(self.mainWidget.width, total_height)  # width — property
     
     def validateCurrentStep(self):
         """Validate current step before moving to next"""
