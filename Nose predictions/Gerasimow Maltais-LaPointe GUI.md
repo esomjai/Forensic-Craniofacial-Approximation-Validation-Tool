@@ -80,6 +80,8 @@ class GerasimowNosePredictor(qt.QWidget):
         
         # Step stack
         self.stepStack = qt.QStackedWidget()
+        self.stepStack.setSizePolicy(qt.QSizePolicy.Preferred, qt.QSizePolicy.Preferred)
+
         scrollLayout.addWidget(self.stepStack)
         
         # Status label
@@ -101,7 +103,7 @@ class GerasimowNosePredictor(qt.QWidget):
         self.logWidget.setMaximumHeight(120)
         logLayout.addWidget(self.logWidget)
         scrollLayout.addWidget(logGroupBox)
-        
+        scrollLayout.addStretch(1)          # ← add this line
         self.scrollArea.setWidget(scrollContent)
         mainLayout.addWidget(self.scrollArea)
         
