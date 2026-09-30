@@ -2,17 +2,20 @@
 class ShrinkableStack(qt.QStackedWidget):
     """QStackedWidget that reports the current page's size hint,
     not the maximum of all pages."""
+
+    @property
     def sizeHint(self):
         w = self.currentWidget()
         if w is not None:
-            return w.sizeHint()
-        return super().sizeHint()
+            return w.sizeHint
+        return qt.QStackedWidget.sizeHint(self)
 
+    @property
     def minimumSizeHint(self):
         w = self.currentWidget()
         if w is not None:
-            return w.minimumSizeHint()
-        return super().minimumSizeHint()
+            return w.minimumSizeHint
+        return qt.QStackedWidget.minimumSizeHint(self)
 
 class GerasimowNosePredictor(qt.QWidget):
     def __init__(self, parent=None):
