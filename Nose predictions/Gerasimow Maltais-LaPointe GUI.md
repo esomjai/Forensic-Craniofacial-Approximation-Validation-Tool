@@ -1,21 +1,4 @@
 ```python
-class ShrinkableStack(qt.QStackedWidget):
-    """QStackedWidget that reports the current page's size hint,
-    not the maximum of all pages."""
-
-    @property
-    def sizeHint(self):
-        w = self.currentWidget()
-        if w is not None:
-            return w.sizeHint
-        return qt.QStackedWidget.sizeHint(self)
-
-    @property
-    def minimumSizeHint(self):
-        w = self.currentWidget()
-        if w is not None:
-            return w.minimumSizeHint
-        return qt.QStackedWidget.minimumSizeHint(self)
 
 class GerasimowNosePredictor(qt.QWidget):
     def __init__(self, parent=None):
@@ -85,10 +68,10 @@ class GerasimowNosePredictor(qt.QWidget):
         mainLayout.addWidget(separator)
         
         # ==================== SCROLLABLE CONTENT ====================
-        scrollArea = qt.QScrollArea()
-        scrollArea.setWidgetResizable(True)
-        scrollArea.setMinimumHeight(150)
-        scrollArea.setSizePolicy(qt.QSizePolicy.Preferred, qt.QSizePolicy.Preferred)
+        self.scrollArea = qt.QScrollArea()
+        self.scrollArea.setWidgetResizable(True)
+        self.scrollArea.setMinimumHeight(150)
+        self.scrollArea.setSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Expanding)
         
         scrollContent = qt.QWidget()
         scrollLayout = qt.QVBoxLayout(scrollContent)
@@ -96,7 +79,7 @@ class GerasimowNosePredictor(qt.QWidget):
         scrollLayout.setSpacing(10)
         
         # Step stack
-        self.stepStack = ShrinkableStack()
+        self.stepStack = qt.QStackedWidget()
         scrollLayout.addWidget(self.stepStack)
         
         # Status label
@@ -119,7 +102,7 @@ class GerasimowNosePredictor(qt.QWidget):
         logLayout.addWidget(self.logWidget)
         scrollLayout.addWidget(logGroupBox)
         
-        scrollArea.setWidget(scrollContent)
+        self.scrollArea.setWidget(scrollContent)
         mainLayout.addWidget(scrollArea)
         
         self.decisions = []
@@ -560,7 +543,7 @@ class GerasimowNosePredictor(qt.QWidget):
         self.step4ContentLayout.addWidget(methodLabel)
         
         # Create scroll area for detailed instructions
-        scrollArea = qt.QScrollArea()
+        self.scrollArea = qt.QScrollArea()
         scrollArea.setWidgetResizable(True)
         scrollArea.setMaximumHeight(400)
         instructions_container = qt.QWidget()
@@ -1479,11 +1462,25 @@ class GerasimowNosePredictor(qt.QWidget):
                     "Tangents", "R2 Placement", "Results"]
         self.stepStatusLabel.setText(f"📍 Current: {step_names[self.currentStep]} - Follow instructions above")
 
-        # Now let the window hug the current step's natural height
-        self.stepStack.adjustSize()
+        # Resize the window to fit the current step's content.
+        # We can't rely on QStackedWidget's sizeHint (it returns the max
+        # of all pages), so we measure the current page directly.
         current_page = self.stepStack.currentWidget()
         if current_page is not None:
-            self.mainWidget.adjustSize()
+            current_page.adjustSize()
+            step_height = current_page.sizeHint.height
+
+            # Budget for: top bar (~40) + nav (~40) + separator (~5)
+            # + status label (~45) + log (~35) + margins/padding (~40)
+            chrome_height = 200
+
+            total_height = step_height + chrome_height
+
+            # Clamp so the window never opens absurdly small or off-screen
+            total_height = max(total_height, 400)
+            total_height = min(total_height, 900)
+
+            self.mainWidget.resize(self.mainWidget.width, total_height)
     
     def validateCurrentStep(self):
         """Validate current step before moving to next"""
