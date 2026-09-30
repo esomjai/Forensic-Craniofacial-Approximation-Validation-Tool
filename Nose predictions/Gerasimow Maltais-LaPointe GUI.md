@@ -86,7 +86,8 @@ class GerasimowNosePredictor(qt.QWidget):
         self.stepStatusLabel.setWordWrap(True)
         self.stepStatusLabel.setStyleSheet("padding: 8px; background-color: #f0f0f0; border-radius: 5px; font-weight: bold;")
         scrollLayout.addWidget(self.stepStatusLabel)
-        
+        scrollLayout.addStretch(1)
+
         # Optional decision log
         logGroupBox = qt.QGroupBox("Decision Log (click to expand/collapse)")
         logGroupBox.setCheckable(True)
