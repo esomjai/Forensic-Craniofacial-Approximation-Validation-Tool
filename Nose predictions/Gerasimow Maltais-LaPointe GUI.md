@@ -86,7 +86,7 @@ class GerasimowNosePredictor(qt.QWidget):
         self.stepStatusLabel.setWordWrap(True)
         self.stepStatusLabel.setStyleSheet("padding: 8px; background-color: #f0f0f0; border-radius: 5px; font-weight: bold;")
         scrollLayout.addWidget(self.stepStatusLabel)
-        scrollLayout.addStretch(1)
+        
 
         # Optional decision log
         logGroupBox = qt.QGroupBox("Decision Log (click to expand/collapse)")
@@ -255,9 +255,9 @@ class GerasimowNosePredictor(qt.QWidget):
         self.nextButton.clicked.connect(self.onNextButtonClicked)
         
         self.navLayout.addWidget(self.prevButton)
-        self.navLayout.addStretch(1)
+    
         self.navLayout.addWidget(self.stepLabel)
-        self.navLayout.addStretch(1)
+    
         self.navLayout.addWidget(self.nextButton)
     
     def createAllStepWidgets(self):
@@ -309,7 +309,7 @@ class GerasimowNosePredictor(qt.QWidget):
         self.step1StatusLabel.setStyleSheet("padding: 10px; background-color: #f0f0f0; border-radius: 5px;")
         layout.addWidget(self.step1StatusLabel)
         
-        layout.addStretch(1)
+        
         self.stepStack.addWidget(widget)
     
     def createStep2_PlaneSetup(self):
@@ -358,7 +358,6 @@ class GerasimowNosePredictor(qt.QWidget):
         self.step2StatusLabel.setStyleSheet("padding: 10px; background-color: #f0f0f0; border-radius: 5px;")
         layout.addWidget(self.step2StatusLabel)
         
-        layout.addStretch(1)
         self.stepStack.addWidget(widget)
     
     def createStep3_Segmentation(self):
@@ -447,7 +446,7 @@ class GerasimowNosePredictor(qt.QWidget):
         self.step3StatusLabel.setStyleSheet("padding: 10px; background-color: #f0f0f0; border-radius: 5px;")
         mainLayout.addWidget(self.step3StatusLabel)
         
-        mainLayout.addStretch(1)
+
         self.stepStack.addWidget(widget)
         
         # Store the chosen method
@@ -473,7 +472,7 @@ class GerasimowNosePredictor(qt.QWidget):
         self.step4StatusLabel.setStyleSheet("padding: 10px; background-color: #f0f0f0; border-radius: 5px;")
         mainLayout.addWidget(self.step4StatusLabel)
         
-        mainLayout.addStretch(1)
+        
         self.stepStack.addWidget(widget)
     
     def populateStep4ForManualMethod(self):
@@ -813,7 +812,8 @@ class GerasimowNosePredictor(qt.QWidget):
         self.step5StatusLabel.setStyleSheet("padding: 10px; background-color: #f0f0f0; border-radius: 5px;")
         layout.addWidget(self.step5StatusLabel)
         
-        layout.addStretch(1)
+        
+
         self.stepStack.addWidget(widget)
     
     def onCreateEmptyT4R(self):
@@ -1070,7 +1070,7 @@ class GerasimowNosePredictor(qt.QWidget):
         self.calculateErrorsButton.clicked.connect(self.onCalculateErrorsClicked)
         layout.addWidget(self.calculateErrorsButton)
         
-        layout.addStretch(1)
+        
         self.stepStack.addWidget(widget)
     
     def onElongateT4ForR2(self):
@@ -1422,7 +1422,7 @@ class GerasimowNosePredictor(qt.QWidget):
         self.step7StatusLabel.setStyleSheet("padding: 10px; background-color: #f0f0f0; border-radius: 5px;")
         layout.addWidget(self.step7StatusLabel)
         
-        layout.addStretch(1)
+    
         self.stepStack.addWidget(widget)
     
     # ========================================================================
@@ -1446,19 +1446,26 @@ class GerasimowNosePredictor(qt.QWidget):
     def updateStepUI(self):
         """Update the UI for the current step"""
         self.stepStack.setCurrentIndex(self.currentStep)
+
+        # Update the step label and nav buttons first
         self.stepLabel.setText(f"Step {self.currentStep + 1}/{self.totalSteps}")
-        
-        # Update button states
         self.prevButton.setEnabled(self.currentStep > 0)
-        
+
         if self.currentStep == self.totalSteps - 1:
             self.nextButton.setText("Finish")
         else:
             self.nextButton.setText("Next ▶")
-        
+
         # Update status label based on current step
-        step_names = ["Load Landmarks", "Create Plane", "Visualization", "Setup", "Tangents", "R2 Placement", "Results"]
+        step_names = ["Load Landmarks", "Create Plane", "Visualization", "Setup",
+                    "Tangents", "R2 Placement", "Results"]
         self.stepStatusLabel.setText(f"📍 Current: {step_names[self.currentStep]} - Follow instructions above")
+
+        # Now let the window hug the current step's natural height
+        self.stepStack.adjustSize()
+        current_page = self.stepStack.currentWidget()
+        if current_page is not None:
+            self.mainWidget.adjustSize()
     
     def validateCurrentStep(self):
         """Validate current step before moving to next"""
