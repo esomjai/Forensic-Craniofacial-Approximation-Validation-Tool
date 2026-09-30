@@ -104,57 +104,54 @@ class GerasimowNosePredictor(qt.QWidget):
         mainLayout.addWidget(scrollArea)
         
         self.decisions = []
-        self.log("Starting Threefold ANS Method")
+        self.log("Starting Two-Tangent Method")
         
+                self.decisions = []
+        self.log("Starting Gerasimow's nose prediction process")
+
         # ==================== NODE STORAGE ====================
         self.landmarksNode = None
-        self.referencePlane = None
+        self.planeNode = None
         self.boneModel = None
-        self.volumeNode = None
         self.boneLeftModel = None
         self.boneRightModel = None
-        self.vmjAcaLine = None
-        self.nasalSpineVector = None
-        self.subProLine = None
-        self.predictedPronasaleNode = None
-        self.trueSoftTissueNode = None
-        
-        # ==================== OBSERVERS / FLAGS ====================
-        self.vmjObserver = None
-        self.vectorObserver = None
-        self.mpObserver = None
+
+        # ==================== TANGENT / POINT STORAGE ====================
+        self.tangents = {}
+        self.points = {}
+        self.tangentNodes = {}
+        self.tangent_backups = {}
+        self.all_measurements = {}
+        self.all_coordinates = {}
+        self.intersections = {}
+        self.tangent_observer_id = None
+
+        # ==================== FLAGS ====================
         self.isDynamicModelerInstalled = False
-        self._isUpdatingVector = False
-        self._isUpdatingMP = False
-        self._initialMPPos = None
-        self._mp_index = -1
-        self.step6_complete = False
-        self.step5_complete = False
-        self.step4_skipped = False
-        self.manualVolumeRendering = False
-        
-        self.cylinderRadius = 2.0
-        
+        self.updatingTangent = False
+        self.currentDialog = None
+        self.minLogLevel = 1
+        self.DEBUG_MODE = False
+
         # ==================== CURRENT STEP ====================
         self.currentStep = 0
-        self.totalSteps = 9
-        
+        self.totalSteps = 7
+
         # Create all step widgets
         self.createAllStepWidgets()
-        
+
         # Size
         self.mainWidget.resize(560, 680)
         self.mainWidget.setMinimumSize(520, 600)
         self.mainWidget.setMaximumSize(850, 900)
-        
+
         # Dependencies & scene
         self.checkDependencies()
         self.syncWithScene()
-        
+
         # UI
-        self.currentStep = self.determineCurrentStep()
         self.updateStepUI()
-        
+
         # Show
         self.mainWidget.show()
     
