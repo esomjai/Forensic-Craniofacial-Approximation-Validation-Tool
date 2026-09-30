@@ -103,7 +103,7 @@ class GerasimowNosePredictor(qt.QWidget):
         scrollLayout.addWidget(logGroupBox)
         
         self.scrollArea.setWidget(scrollContent)
-        mainLayout.addWidget(scrollArea)
+        mainLayout.addWidget(self.scrollArea)
         
         self.decisions = []
         self.log("Starting Two-Tangent Method")
