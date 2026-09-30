@@ -1,51 +1,43 @@
 ```python
-import os
-import qt
-import slicer
-import vtk
-import numpy as np
-import urllib.request
-import tempfile
-
-class GerasimowNosePredictor:
-    def __init__(self):
-        # Debug mode toggle
+class ThreefoldANSGUI(qt.QWidget):
+    def __init__(self, parent=None):
+        qt.QWidget.__init__(self, parent)
+        
+        # Debug mode
         self.DEBUG_MODE = False
         
-        # Set this at the beginning to avoid errors
+        # Set at beginning to avoid errors
         self.minLogLevel = 1
         self.currentDialog = None
-        self.intersections = {}
-        self.tangent_observer_id = None
         
-        # Disable popup notifications
+        # Disable markups popup notifications
         settings = qt.QSettings()
         settings.setValue("Markups/MarkupsFidNotificationPopupEnabled", 0)
         
-        # Create main widget with step navigation
+        # ==================== MAIN WIDGET ====================
         self.mainWidget = qt.QWidget()
-        self.mainWidget.setWindowTitle("Gerasimov's Nose Prediction (with Maltais-LaPointe's 3D adjustment)")
+        self.mainWidget.setWindowTitle("Threefold ANS Method")
+        self.mainWidget.setObjectName("ThreefoldANSGUI")
         
-        # Set window to stay on top initially (PINNED by default)
+        # Pinned by default
         self.mainWidget.setWindowFlags(
             self.mainWidget.windowFlags() | qt.Qt.WindowStaysOnTopHint
         )
         self.isPinned = True
         
-        # Main layout
+        # ==================== MAIN LAYOUT ====================
         mainLayout = qt.QVBoxLayout(self.mainWidget)
         mainLayout.setContentsMargins(10, 10, 10, 10)
         mainLayout.setSpacing(8)
         
-        # Create top bar with title and pin button
+        # ==================== TOP BAR: TITLE + PIN ====================
         topBarLayout = qt.QHBoxLayout()
         
-        titleLabel = qt.QLabel("Gerasimov's Two Tangent Method")
+        titleLabel = qt.QLabel("Threefold ANS Method")
         titleLabel.setStyleSheet("font-weight: bold; font-size: 18px;")
         titleLabel.setAlignment(qt.Qt.AlignCenter)
-        topBarLayout.addWidget(titleLabel, 1)  # Give title stretch
+        topBarLayout.addWidget(titleLabel, 1)
         
-        # Pin/Unpin button
         self.pinButton = qt.QPushButton("📌 Pinned")
         self.pinButton.setCheckable(True)
         self.pinButton.setChecked(True)
@@ -67,43 +59,42 @@ class GerasimowNosePredictor:
         
         mainLayout.addLayout(topBarLayout)
         
-        # ========== NAVIGATION BUTTONS AT TOP ==========
+        # ==================== NAVIGATION AT TOP ====================
         self.setupNavigation()
         mainLayout.addLayout(self.navLayout)
         
-        # Add separator line
+        # Separator
         separator = qt.QFrame()
         separator.setFrameShape(qt.QFrame.HLine)
         separator.setFrameShadow(qt.QFrame.Sunken)
         mainLayout.addWidget(separator)
         
-        # ========== SCROLLABLE CONTENT AREA ==========
+        # ==================== SCROLLABLE CONTENT ====================
         scrollArea = qt.QScrollArea()
         scrollArea.setWidgetResizable(True)
         scrollArea.setMinimumHeight(450)
         scrollArea.setSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Expanding)
         
-        # Create scroll content widget
         scrollContent = qt.QWidget()
         scrollLayout = qt.QVBoxLayout(scrollContent)
         scrollLayout.setContentsMargins(0, 0, 0, 0)
         scrollLayout.setSpacing(10)
         
-        # Create stacked widget for steps
+        # Step stack
         self.stepStack = qt.QStackedWidget()
         scrollLayout.addWidget(self.stepStack)
         
-        # Status label (directly below stepStack)
+        # Status label
         self.stepStatusLabel = qt.QLabel("Ready")
         self.stepStatusLabel.setWordWrap(True)
         self.stepStatusLabel.setStyleSheet("padding: 8px; background-color: #f0f0f0; border-radius: 5px; font-weight: bold;")
         scrollLayout.addWidget(self.stepStatusLabel)
         
-        # Decision log (directly below status)
+        # Optional decision log
         logGroupBox = qt.QGroupBox("Decision Log (click to expand/collapse)")
         logGroupBox.setCheckable(True)
-        logGroupBox.setChecked(False)  # Start collapsed
-        logGroupBox.setMaximumHeight(150)  # Limit when expanded
+        logGroupBox.setChecked(False)
+        logGroupBox.setMaximumHeight(150)
         logLayout = qt.QVBoxLayout(logGroupBox)
         logLayout.setContentsMargins(5, 5, 5, 5)
         self.logWidget = qt.QTextEdit()
@@ -116,47 +107,58 @@ class GerasimowNosePredictor:
         mainLayout.addWidget(scrollArea)
         
         self.decisions = []
-        self.log("Starting Gerasimow's nose prediction process")
+        self.log("Starting Threefold ANS Method")
         
-        # Storage variables
+        # ==================== NODE STORAGE ====================
         self.landmarksNode = None
-        self.planeNode = None
+        self.referencePlane = None
         self.boneModel = None
+        self.volumeNode = None
         self.boneLeftModel = None
         self.boneRightModel = None
-        self.tangents = {}
-        self.points = {}
-        self.tangentNodes = {}
-        self.tangent_backups = {}
-        self.all_measurements = {}
-        self.all_coordinates = {}
+        self.vmjAcaLine = None
+        self.nasalSpineVector = None
+        self.subProLine = None
+        self.predictedPronasaleNode = None
+        self.trueSoftTissueNode = None
+        
+        # ==================== OBSERVERS / FLAGS ====================
+        self.vmjObserver = None
+        self.vectorObserver = None
+        self.mpObserver = None
         self.isDynamicModelerInstalled = False
+        self._isUpdatingVector = False
+        self._isUpdatingMP = False
+        self._initialMPPos = None
+        self._mp_index = -1
+        self.step6_complete = False
+        self.step5_complete = False
+        self.step4_skipped = False
+        self.manualVolumeRendering = False
         
-        # Flag to prevent recursive tangent updates
-        self.updatingTangent = False
+        self.cylinderRadius = 2.0
         
-        # Current step tracking
+        # ==================== CURRENT STEP ====================
         self.currentStep = 0
-        self.totalSteps = 7 
+        self.totalSteps = 9
         
         # Create all step widgets
         self.createAllStepWidgets()
         
-        # Set window size
+        # Size
         self.mainWidget.resize(560, 680)
         self.mainWidget.setMinimumSize(520, 600)
         self.mainWidget.setMaximumSize(850, 900)
         
-        # Check dependencies
+        # Dependencies & scene
         self.checkDependencies()
-        
-        # Sync with existing scene
         self.syncWithScene()
         
-        # Update UI for current step
+        # UI
+        self.currentStep = self.determineCurrentStep()
         self.updateStepUI()
         
-        # Show the widget
+        # Show
         self.mainWidget.show()
     
     def showDialogOnTop(self, message, title="Information", icon="info"):
@@ -205,7 +207,7 @@ class GerasimowNosePredictor:
         
         # Need to re-show the window for flags to take effect
         self.mainWidget.show()
-
+    
     def debug_print(self, message):
         """Print debug messages only if DEBUG_MODE is enabled"""
         if self.DEBUG_MODE:
@@ -244,7 +246,6 @@ class GerasimowNosePredictor:
             )
     
     def setupNavigation(self):
-        """Create navigation buttons"""
         self.navLayout = qt.QHBoxLayout()
         self.navLayout.setContentsMargins(0, 0, 0, 0)
         
@@ -252,7 +253,7 @@ class GerasimowNosePredictor:
         self.prevButton.setToolTip("Go to the previous step")
         self.prevButton.clicked.connect(self.onPrevButtonClicked)
         
-        self.stepLabel = qt.QLabel("Step 1/7")
+        self.stepLabel = qt.QLabel("Step 1/9")
         self.stepLabel.setAlignment(qt.Qt.AlignCenter)
         self.stepLabel.setStyleSheet("font-weight: bold; font-size: 14px;")
         
@@ -270,8 +271,8 @@ class GerasimowNosePredictor:
         """Create all step widgets"""
         self.createStep1_Welcome()
         self.createStep2_PlaneSetup()
-        self.createStep3_Segmentation() 
-        self.createStep4_ExecuteVisualization()  
+        self.createStep3_Segmentation()
+        self.createStep4_ExecuteVisualization()
         self.createStep5_TangentCreation()
         self.createStep6_SoftTissueComparison()
         self.createStep7_Results()
@@ -458,7 +459,7 @@ class GerasimowNosePredictor:
         
         # Store the chosen method
         self.chosenVisualizationMethod = None
-
+    
     def createStep4_ExecuteVisualization(self):
         """Step 4: Execute the chosen visualization method"""
         widget = qt.QWidget()
@@ -481,7 +482,7 @@ class GerasimowNosePredictor:
         
         mainLayout.addStretch(1)
         self.stepStack.addWidget(widget)
-
+    
     def populateStep4ForManualMethod(self):
         """Populate Step 4 with manual volume rendering instructions"""
         # Clear existing content
@@ -534,7 +535,7 @@ class GerasimowNosePredictor:
         self.step4ContentLayout.addWidget(continueButton)
         
         self.step4StatusLabel.setText("Status: Follow the volume rendering instructions above.")
-
+    
     def populateStep4ForSegmentation(self):
         """Populate Step 4 with detailed segmentation instructions"""
         # Clear existing content
@@ -622,7 +623,7 @@ class GerasimowNosePredictor:
         self.populateStep4ForManualMethod()
         # Enable next button
         self.nextButton.setEnabled(True)
-
+    
     def onChooseSegmentationMethod(self):
         """Handle segmentation method selection"""
         self.chosenVisualizationMethod = "segmentation"
@@ -631,7 +632,7 @@ class GerasimowNosePredictor:
         self.populateStep4ForSegmentation()
         # Enable next button
         self.nextButton.setEnabled(True)
-
+    
     def onSkipToTangents(self):
         """Skip directly to tangent creation (for manual method)"""
         self.step4StatusLabel.setText("Status: Proceeding to tangent creation.")
@@ -639,7 +640,7 @@ class GerasimowNosePredictor:
         # Jump to Step 5 (Tangent Creation)
         self.currentStep = 4  # Step 5 is index 4 (0-indexed)
         self.updateStepUI()
-
+    
     def createStep5_TangentCreation(self):
         """Step 5: Create Tangent Lines"""
         widget = qt.QWidget()
@@ -1347,7 +1348,7 @@ class GerasimowNosePredictor:
                 self.log(f"Intersection {name}: Failed to calculate")
         
         return intersections
-
+    
     def createStep7_Results(self):
         """Step 7: Results and Export"""
         widget = qt.QWidget()
@@ -1470,7 +1471,7 @@ class GerasimowNosePredictor:
         """Validate current step before moving to next"""
         if self.currentStep == 0:
             # Step 1: Check if landmarks are loaded
-            if not self.landmarksNode: 
+            if not self.landmarksNode:
                 self.showDialogOnTop("Please load landmarks before continuing.", "Warning", "warning")
                 return False
         elif self.currentStep == 1:
@@ -1633,7 +1634,7 @@ class GerasimowNosePredictor:
     
     def runT1T2Shortcut(self):
         """Run the T1-T2 shortcut workflow (only T1-T2 intersection)"""
-        self.clearResults()  
+        self.clearResults()
         self.log("=== Starting T1-T2 Shortcut Workflow ===")
         
         # Check if T1 and T2 exist
@@ -1710,6 +1711,7 @@ class GerasimowNosePredictor:
         if "T4" in self.tangents:
             self.log("T4 is available for R2 calculation in Step 6.")
         self.step5StatusLabel.setText("Status: Full mode ready. Go to Step 6 and click 'Compare True vs. Predicted Points'.")
+    
     # ========================================================================
     # RESULT COPYING METHODS
     # ========================================================================
@@ -1749,7 +1751,7 @@ class GerasimowNosePredictor:
             app_clipboard.setText(clipboard_text)
             self.showDialogOnTop("Coordinates copied to clipboard!")
             
-        except Exception as e: 
+        except Exception as e:
             self.showDialogOnTop(f"Failed to copy coordinates: {e}", "Error", "error")
     
     def onFinish(self):
@@ -1781,13 +1783,13 @@ class GerasimowNosePredictor:
         
         # Check for plane
         planeNode = slicer.util.getFirstNodeByName("INB") or slicer.util.getFirstNodeByName("MSP")
-        if planeNode: 
+        if planeNode:
             self.planeNode = planeNode
             self.step2StatusLabel.setText(f"Status: Found existing '{planeNode.GetName()}' plane.")
         
         # Check for bone model
         boneModel = slicer.util.getFirstNodeByName("Bone")
-        if boneModel: 
+        if boneModel:
             self.boneModel = boneModel
             if hasattr(self, 'boneModelSelector'):
                 self.boneModelSelector.setCurrentNode(boneModel)
@@ -1797,7 +1799,7 @@ class GerasimowNosePredictor:
         for name in tangent_names:
             try:
                 node = slicer.util.getNode(name)
-                if node: 
+                if node:
                     self.tangentNodes[name] = node
                     if node.GetNumberOfControlPoints() >= 2:
                         start = [0, 0, 0]
@@ -1868,7 +1870,7 @@ class GerasimowNosePredictor:
         self.all_coordinates.clear()
         self.updateResultsTables()
         self.log("Cleared previous results tables.")
-
+    
     def updateResultsTables(self):
         """Update both results tables with current data"""
         # Update Measurements Table
@@ -1940,7 +1942,7 @@ class GerasimowNosePredictor:
         self.step1StatusLabel.setText("Status: Downloading...")
         slicer.app.processEvents()
         
-        try: 
+        try:
             with urllib.request.urlopen(url) as response:
                 fileData = response.read()
             with tempfile.NamedTemporaryFile(delete=False, suffix='.mrk.json', mode='wb') as tempFile:
@@ -2015,7 +2017,7 @@ class GerasimowNosePredictor:
             try:
                 oldPlane = slicer.util.getNode(plane_name)
                 slicer.mrmlScene.RemoveNode(oldPlane)
-            except: 
+            except:
                 pass
             
             # Create new plane
@@ -2035,7 +2037,7 @@ class GerasimowNosePredictor:
     
     def onConfirmSegmentation(self, node):
         """Confirm bone model selection"""
-        if node: 
+        if node:
             self.boneModel = node
             self.step3StatusLabel.setText(f"Status: Confirmed '{node.GetName()}' as bone model!")
             self.log(f"Confirmed bone model: {node.GetName()}")
@@ -2048,19 +2050,20 @@ class GerasimowNosePredictor:
         slicer.util.selectModule('SegmentEditor')
         self.log("Opened Segment Editor module")
         self.step3StatusLabel.setText("Status: Segment Editor opened. Follow the instructions above.")
-
+    
     def onOpenVolumeRendering(self):
         """Open the Volume Rendering module"""
         slicer.util.selectModule('VolumeRendering')
         self.log("Opened Volume Rendering module for manual method")
         self.step3StatusLabel.setText("Status: Volume Rendering opened. Use Display ROI to visualize the skull.")
-    
+
 
 # Helper function for unit vector
 def _unit(v):
     """Return unit vector"""
     n = np.linalg.norm(v)
     return (v / n) if n > 1e-8 else np.array([1.0, 0.0, 0.0])
+
 
 # ========================================================================
 # SEQUENTIAL WORKFLOW SUPPORT
@@ -2092,6 +2095,7 @@ def enable_sequential_mode(callback=None):
                 next_callback()
         
         gui.onFinish = sequential_finish
+
 
 # Auto-run if script is executed directly
 if __name__ == "__main__":
