@@ -1,5 +1,5 @@
 ```python
-class ThreefoldANSGUI(qt.QWidget):
+class GerasimowNosePredictor(qt.QWidget):
     def __init__(self, parent=None):
         qt.QWidget.__init__(self, parent)
         
@@ -14,11 +14,9 @@ class ThreefoldANSGUI(qt.QWidget):
         settings = qt.QSettings()
         settings.setValue("Markups/MarkupsFidNotificationPopupEnabled", 0)
         
-        # ==================== MAIN WIDGET ====================
         self.mainWidget = qt.QWidget()
-        self.mainWidget.setWindowTitle("Threefold ANS Method")
-        self.mainWidget.setObjectName("ThreefoldANSGUI")
-        
+        self.mainWidget.setWindowTitle("Gerasimov's Nose Prediction (with Maltais-LaPointe's 3D adjustment)")
+        self.mainWidget.setObjectName("GerasimowNosePredictor")
         # Pinned by default
         self.mainWidget.setWindowFlags(
             self.mainWidget.windowFlags() | qt.Qt.WindowStaysOnTopHint
@@ -32,8 +30,7 @@ class ThreefoldANSGUI(qt.QWidget):
         
         # ==================== TOP BAR: TITLE + PIN ====================
         topBarLayout = qt.QHBoxLayout()
-        
-        titleLabel = qt.QLabel("Threefold ANS Method")
+        titleLabel = qt.QLabel("Gerasimov's Two Tangent Method")
         titleLabel.setStyleSheet("font-weight: bold; font-size: 18px;")
         titleLabel.setAlignment(qt.Qt.AlignCenter)
         topBarLayout.addWidget(titleLabel, 1)
