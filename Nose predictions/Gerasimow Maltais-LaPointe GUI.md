@@ -1468,7 +1468,7 @@ class GerasimowNosePredictor(qt.QWidget):
         current_page = self.stepStack.currentWidget()
         if current_page is not None:
             current_page.adjustSize()
-            step_height = current_page.sizeHint.height
+            step_height = current_page.sizeHint.height()
 
             # Budget for: top bar (~40) + nav (~40) + separator (~5)
             # + status label (~45) + log (~35) + margins/padding (~40)
@@ -1480,7 +1480,7 @@ class GerasimowNosePredictor(qt.QWidget):
             total_height = max(total_height, 400)
             total_height = min(total_height, 900)
 
-            self.mainWidget.resize(self.mainWidget.width, total_height)
+            self.mainWidget.resize(self.mainWidget.width(), total_height)
     
     def validateCurrentStep(self):
         """Validate current step before moving to next"""
