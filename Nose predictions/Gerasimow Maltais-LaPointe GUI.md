@@ -69,7 +69,7 @@ class GerasimowNosePredictor(qt.QWidget):
         # ==================== SCROLLABLE CONTENT ====================
         scrollArea = qt.QScrollArea()
         scrollArea.setWidgetResizable(True)
-        scrollArea.setMinimumHeight(450)
+        scrollArea.setMinimumHeight(150)
         scrollArea.setSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Expanding)
         
         scrollContent = qt.QWidget()
@@ -140,9 +140,9 @@ class GerasimowNosePredictor(qt.QWidget):
         self.createAllStepWidgets()
 
         # Size
+        self.mainWidget.setMinimumSize(520, 300)
         self.mainWidget.resize(560, 680)
-        self.mainWidget.setMinimumSize(520, 600)
-        self.mainWidget.setMaximumSize(850, 900)
+        self.mainWidget.setMaximumSize(850, 1200)
 
         # Dependencies & scene
         self.checkDependencies()
