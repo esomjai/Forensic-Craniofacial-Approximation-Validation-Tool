@@ -334,4 +334,5 @@ dockWidget = qt.QDockWidget("Advanced Orbital Workflow")
 dockWidget.setWidget(advancedWorkflowGUI)
 slicer.util.mainWindow().addDockWidget(qt.Qt.RightDockWidgetArea, dockWidget)
 dockWidget.show()
-'''
+
+```
