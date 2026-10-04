@@ -24,6 +24,13 @@ If you choose to do a segmentation, follow the tutorial at [ROI vs Segmentation]
 
 Do not forget to re-visit the [tutorial](https://github.com/esomjai/ForensicCraniofacialApproximationDatabase/blob/basics/004_Copying%20measurements%20to%20Clipboard.md) or [code](https://github.com/esomjai/ForensicCraniofacialApproximationDatabase/releases/tag/CopyMeasurementsToClipboard) for copying measurements to the clipboard
 
+For a fully transparent format, I recommend having 3 tables: 
+1) measurement.csv - output tables for each method, as it appears in the GUI populated by scene information
+2) RStudio.csv - to run comparison between any or all prediction methods; added to the end of each GUI
+3) population.csv - to have population data with meta-rich information separately
+
+**An RStudio script to run landmark error data for nose predictions is currently underway**
+
 #### Currently available methodologies for nose approximation and their original papers are: 
 
 Method name | Method reference | Step-by-step explanation | Graphic User Interface
