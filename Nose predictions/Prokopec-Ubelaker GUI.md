@@ -1056,6 +1056,23 @@ class ProkopecUbelakerGUI(qt.QWidget):
                     continue
             self.intersectionLinesStatusLabel.setText(f"Created {count} colored intersection lines.")
 
+    
+    def onFindLineAIntersectionClicked(self):
+        self.find_line_intersections("Line_A", "mirrorA")
+
+    def onFindLineBIntersectionClicked(self):
+        self.find_line_intersections("Line_B", "mirrorB")
+
+    def project_point_to_line(self, point, line_node):
+        p1 = np.array(line_node.GetNthControlPointPosition(0))
+        p2 = np.array(line_node.GetNthControlPointPosition(1))
+        line_vec = p2 - p1
+        point_vec = point - p1
+        line_vec_norm = line_vec / np.linalg.norm(line_vec)
+        projection_length = np.dot(point_vec, line_vec_norm)
+        projected_point = p1 + projection_length * line_vec_norm
+        return projected_point
+        
     def onCreateLinesABClicked(self):
         with slicer.util.tryWithErrorDisplay("Failed to create lines A and B."):
             plane_count = self.planeCountSlider.value
@@ -1069,7 +1086,7 @@ class ProkopecUbelakerGUI(qt.QWidget):
             pos = {}
             for name in ["prosthion", "nasion", "rhinion"]:
                 for i in range(landmarks_node.GetNumberOfControlPoints()):
-                    if name in landmarksNode.GetNthControlPointLabel(i).lower():
+                    if name in landmarks_node.GetNthControlPointLabel(i).lower():
                         pos[name] = np.array(landmarks_node.GetNthControlPointPosition(i))
                         break
             if len(pos) < 3:
@@ -1092,23 +1109,6 @@ class ProkopecUbelakerGUI(qt.QWidget):
             displayNode_b.SetSelectedColor(1.0, 1.0, 0.0)
             self.helperNodes.append(line_b)
             self.linesABStatusLabel.setText("Lines A and B created.")
-
-    def onFindLineAIntersectionClicked(self):
-        self.find_line_intersections("Line_A", "mirrorA")
-
-    def onFindLineBIntersectionClicked(self):
-        self.find_line_intersections("Line_B", "mirrorB")
-
-    def project_point_to_line(self, point, line_node):
-        p1 = np.array(line_node.GetNthControlPointPosition(0))
-        p2 = np.array(line_node.GetNthControlPointPosition(1))
-        line_vec = p2 - p1
-        point_vec = point - p1
-        line_vec_norm = line_vec / np.linalg.norm(line_vec)
-        projection_length = np.dot(point_vec, line_vec_norm)
-        projected_point = p1 + projection_length * line_vec_norm
-        return projected_point
-
     def find_line_intersections(self, target_line_name, point_prefix):
         with slicer.util.tryWithErrorDisplay(f"Failed to find intersections on {target_line_name}."):
             plane_count = self.planeCountSlider.value
