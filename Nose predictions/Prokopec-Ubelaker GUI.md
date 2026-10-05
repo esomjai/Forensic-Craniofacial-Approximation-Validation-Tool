@@ -476,6 +476,11 @@ class ProkopecUbelakerGUI(qt.QWidget):
         pronasaleLayout.addWidget(self.createStephanButton)
         self.createStephanButton.clicked.connect(self.onCreateStephanPredictionClicked)
         
+        self.createStephanErrorButton = qt.QPushButton("Create Stephan Error Measurement")
+        self.createStephanErrorButton.setEnabled(False)
+        pronasaleLayout.addWidget(self.createStephanErrorButton)
+        self.createStephanErrorButton.clicked.connect(self.onCreateStephanErrorClicked)
+
         self.pronasaleStatusLabel = qt.QLabel("Pronasale landmark not loaded.")
         self.pronasaleStatusLabel.setWordWrap(True)
         pronasaleLayout.addWidget(self.pronasaleStatusLabel)
@@ -577,6 +582,7 @@ class ProkopecUbelakerGUI(qt.QWidget):
             "Plane_", "INB_", "MSP_", "Line_A", "Line_B", "mirrorB_", "mirrorA_",
             "nasal_bone_outline", "nasal outline", "bone", "nasalboneto",
             "pred soft nose outline", "pred error", "nose_profile_outline"
+            "Stephan_pronasale", "Stephan_error"   
         ]
         nodes_to_remove = []
         all_nodes = slicer.mrmlScene.GetNodes()
@@ -1138,6 +1144,11 @@ class ProkopecUbelakerGUI(qt.QWidget):
         with slicer.util.tryWithErrorDisplay(f"Failed to download {node_name_base}."):
             plane_count = self.get_plane_count()
             suffix = self.get_suffix()
+            try:
+            old = slicer.util.getNode(f"Stephan_pronasale{suffix}")
+            slicer.mrmlScene.RemoveNode(old)
+        except slicer.util.MRMLNodeNotFoundException:
+            pass
             node_name = f"{node_name_base}{suffix}"
             status_label.setText("Downloading landmarks...")
             slicer.app.processEvents()
@@ -1302,6 +1313,7 @@ class ProkopecUbelakerGUI(qt.QWidget):
         self.downloadPronasaleButton.setEnabled(checked)
         self.loadPronasaleButton.setEnabled(checked)
         self.createStephanButton.setEnabled(checked)
+        self.createStephanErrorButton.setEnabled(checked)
         if not checked:
             self.pronasaleNode = None
             self.stephanPredictionPoint = None
@@ -1485,18 +1497,96 @@ class ProkopecUbelakerGUI(qt.QWidget):
             else:
                 self.softTissueStatusLabel.setText(f"Created {error_count} error measurement lines correctly.")
             self.populateResultsTable()
+
+    def onCreateStephanErrorClicked(self):
+        """Create only the Stephan pronasale error measurement line."""
+        with slicer.util.tryWithErrorDisplay("Failed to create Stephan error measurement."):
+            suffix = self.get_suffix()
+
+            # --- Explicit prerequisite checks with clear messages ---
+            if not self.pronasaleEnabled:
+                self.pronasaleStatusLabel.setText(
+                    "Error: Enable the pronasale predictor checkbox first."
+                )
+                return
+
+            if not self.pronasaleNode or self.pronasaleNode.GetScene() != slicer.mrmlScene:
+                self.pronasaleStatusLabel.setText(
+                    "Error: Pronasale landmark not loaded (or was removed). "
+                    "Download or load it again."
+                )
+                return
+
+            if (not self.stephanPredictionPoint
+                    or self.stephanPredictionPoint.GetScene() != slicer.mrmlScene):
+                self.pronasaleStatusLabel.setText(
+                    "Error: Stephan prediction point not created (or was removed). "
+                    "Click 'Create Stephan Pronasale Prediction (2 mm)' first."
+                )
+                return
+
+            if self.pronasaleNode.GetNumberOfControlPoints() < 1:
+                self.pronasaleStatusLabel.setText(
+                    "Error: Pronasale landmark has no control points."
+                )
+                return
+
+            if self.stephanPredictionPoint.GetNumberOfControlPoints() < 1:
+                self.pronasaleStatusLabel.setText(
+                    "Error: Stephan prediction point has no control points."
+                )
+                return
+
+            # --- Compute distance ---
+            pronasale_pos = np.array(self.pronasaleNode.GetNthControlPointPosition(0))
+            pred_pos = np.array(self.stephanPredictionPoint.GetNthControlPointPosition(0))
+            dist = float(np.linalg.norm(pred_pos - pronasale_pos))
+            self.stephanDistance = dist
+
+            # --- Remove any previous Stephan error line (idempotent) ---
+            error_line_name = f"Stephan_error{suffix}"
+            try:
+                old = slicer.util.getNode(error_line_name)
+                slicer.mrmlScene.RemoveNode(old)
+            except slicer.util.MRMLNodeNotFoundException:
+                pass
+
+            # --- Create the error line ---
+            error_line = slicer.mrmlScene.AddNewNodeByClass(
+                'vtkMRMLMarkupsLineNode', error_line_name
+            )
+            error_line.AddControlPoint(pred_pos)
+            error_line.AddControlPoint(pronasale_pos)
+            displayNode = error_line.GetDisplayNode()
+            displayNode.SetColor(0.0, 0.5, 1.0)
+            displayNode.SetSelectedColor(0.0, 0.5, 1.0)
+            error_line.SetLocked(True)
+
+            # Keep helper bookkeeping consistent (avoid duplicates)
+            if error_line not in self.helperNodes:
+                self.helperNodes.append(error_line)
+
+            self.pronasaleStatusLabel.setText(
+                f"Stephan error line created. Distance = {dist:.2f} mm"
+            )
+            self.populateResultsTable()
+
+
     
     def populateResultsTable(self):
         self.measurementsTable.setRowCount(0)
         self.measurementsTable.setColumnCount(4)
         self.measurementsTable.setHorizontalHeaderLabels([
-            "Prediction Line", 
-            "Mirror Equivalent", 
-            "Value (mm)", 
+            "Prediction Line",
+            "Mirror Equivalent",
+            "Value (mm)",
             "Error (mm)"
         ])
+
         plane_count = self.planeCountSlider.value
         suffix = f"_{plane_count}p"
+
+        # --- Collect all prediction nodes from the scene ---
         prediction_nodes = {}
         import re
         for node_name, node in slicer.util.getNodes(f'pred soft nose outline *{suffix}').items():
@@ -1504,39 +1594,45 @@ class ProkopecUbelakerGUI(qt.QWidget):
             if match:
                 pred_num = int(match.group(1))
                 prediction_nodes[pred_num] = node
+
         if not prediction_nodes:
             self.measurementsTable.setRowCount(1)
             self.measurementsTable.setItem(0, 0, qt.QTableWidgetItem("No predictions found"))
             return
+
+        # --- One row per prediction line ---
         row = 0
         for pred_num in sorted(prediction_nodes.keys()):
             pred_node = prediction_nodes[pred_num]
             pred_length = np.linalg.norm(
-                np.array(pred_node.GetNthControlPointPosition(1)) - 
+                np.array(pred_node.GetNthControlPointPosition(1)) -
                 np.array(pred_node.GetNthControlPointPosition(0))
             )
+
             mirror_node_name = f"nasalbonetoB{pred_num}{suffix}"
             mirror_length = None
             mirror_label = f"nasalbonetoB{pred_num}"
             try:
                 mirror_node = slicer.util.getNode(mirror_node_name)
                 mirror_length = np.linalg.norm(
-                    np.array(mirror_node.GetNthControlPointPosition(1)) - 
+                    np.array(mirror_node.GetNthControlPointPosition(1)) -
                     np.array(mirror_node.GetNthControlPointPosition(0))
                 )
             except slicer.util.MRMLNodeNotFoundException:
                 mirror_label = "N/A"
+
             error_num = plane_count - pred_num + 1
             error_length = None
             try:
                 error_node_name = f"pred error{error_num}{suffix}"
                 error_node = slicer.util.getNode(error_node_name)
                 error_length = np.linalg.norm(
-                    np.array(error_node.GetNthControlPointPosition(1)) - 
+                    np.array(error_node.GetNthControlPointPosition(1)) -
                     np.array(error_node.GetNthControlPointPosition(0))
                 )
             except slicer.util.MRMLNodeNotFoundException:
                 pass
+
             self.measurementsTable.insertRow(row)
             self.measurementsTable.setItem(row, 0, qt.QTableWidgetItem(f"pred soft nose outline {pred_num}"))
             self.measurementsTable.setItem(row, 1, qt.QTableWidgetItem(mirror_label))
@@ -1549,7 +1645,8 @@ class ProkopecUbelakerGUI(qt.QWidget):
             else:
                 self.measurementsTable.setItem(row, 3, qt.QTableWidgetItem("N/A"))
             row += 1
-        # --- Add Stephan pronasale row if available ---
+
+        # --- Optional: Stephan pronasale row ---
         if self.pronasaleEnabled and self.stephanDistance is not None:
             self.measurementsTable.insertRow(row)
             self.measurementsTable.setItem(row, 0, qt.QTableWidgetItem("Stephan pronasale"))
@@ -1557,12 +1654,13 @@ class ProkopecUbelakerGUI(qt.QWidget):
             self.measurementsTable.setItem(row, 2, qt.QTableWidgetItem("N/A"))
             self.measurementsTable.setItem(row, 3, qt.QTableWidgetItem(f"{self.stephanDistance:.2f}"))
             row += 1
+
+        # --- Formatting ---
         self.measurementsTable.resizeColumnsToContents()
         header = self.measurementsTable.horizontalHeader()
         header.setStretchLastSection(True)
         for i in range(4):
             header.setSectionResizeMode(i, qt.QHeaderView.ResizeToContents)
-    
     # ----------------------------------------------------------------------
     # Cleanup on close
     # ----------------------------------------------------------------------
