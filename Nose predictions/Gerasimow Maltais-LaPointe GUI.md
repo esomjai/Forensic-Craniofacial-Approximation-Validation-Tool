@@ -1,4 +1,10 @@
 ```python
+import urllib.request
+import tempfile
+import os
+import numpy as np
+import qt
+import slicer
 
 class GerasimowNosePredictor(qt.QWidget):
     def __init__(self, parent=None):
