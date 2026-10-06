@@ -110,19 +110,16 @@ class RStudioExporter(object):
 
         dialog = QDialog(parent)
         dialog.setWindowTitle("Subject ID and Code Version")
-        dialog.setMinimumSize(560, 460)
-        dialog.resize(560, 560)
+        dialog.setMinimumSize(520, 320)
+        dialog.resize(520, 360)
 
         layout = QVBoxLayout(dialog)
         layout.setSpacing(10)
         layout.setContentsMargins(15, 15, 15, 15)
 
-        # --- reference image ---
+        # --- reference image (compact) ---
         image_label = QLabel()
         image_label.setAlignment(Qt.AlignCenter)
-        image_label.setMinimumHeight(220)
-        image_label.setStyleSheet(
-            "background-color: #f5f5f5; border: 1px solid #cccccc;")
         image_label.setText("Loading reference image...")
         layout.addWidget(image_label)
 
@@ -134,16 +131,17 @@ class RStudioExporter(object):
             pixmap = QPixmap()
             pixmap.loadFromData(data)
             if not pixmap.isNull():
-                if pixmap.width() > 520:
-                    pixmap = pixmap.scaledToWidth(
-                        520, Qt.SmoothTransformation)
+                target_h = 180
+                if pixmap.height() > target_h:
+                    pixmap = pixmap.scaledToHeight(
+                        target_h, Qt.SmoothTransformation)
                 image_label.setPixmap(pixmap)
                 image_label.setText("")
             else:
                 image_label.setText("[Image decoded as null pixmap]")
         except Exception as e:
             image_label.setText(f"[Could not load reference image]\n{e}")
-
+            
         # --- form ---
         form = QFormLayout()
         sid_edit = QLineEdit()
