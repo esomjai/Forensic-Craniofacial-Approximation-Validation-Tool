@@ -1,5 +1,43 @@
 ```python
-# Copy-paste into 3D Slicer Python Interactor
+# ==================================================================
+#  Bootstrap: load RStudio_wrapper from GitHub
+# ==================================================================
+import os, sys, importlib.util
+import urllib.request
+import tempfile
+
+RSTUDIO_EXPORT_URL = (
+    "https://raw.githubusercontent.com/esomjai/"
+    "Forensic-Craniofacial-Approximation-Validation-Tool/"
+    "refs/heads/basics/Start%20here%20/RStudio_wrapper.py"
+)
+
+def _load_rstudio_wrapper(url=RSTUDIO_EXPORT_URL):
+    cache_dir = os.path.join(tempfile.gettempdir(),
+                             "slicer_rstudio_wrapper")
+    os.makedirs(cache_dir, exist_ok=True)
+    cache_file = os.path.join(cache_dir, "rStudio_wrapper.py")
+    try:
+        with urllib.request.urlopen(url, timeout=15) as r:
+            data = r.read()
+        with open(cache_file, "wb") as f:
+            f.write(data)
+        print(f"[rstudio_wrapper] downloaded {len(data)} bytes")
+    except Exception as e:
+        print(f"[rstudio_wrapper] download failed: {e}")
+        if not os.path.exists(cache_file):
+            print("[rstudio_wrapper] no cache; export button disabled")
+            return None
+    spec = importlib.util.spec_from_file_location(
+        "rstudio_wrapper", cache_file)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["rstudio_wrapper"] = module
+    spec.loader.exec_module(module)
+    return module
+
+_rstudio_wrapper = _load_rstudio_wrapper()
+
+
 import slicer
 import qt
 import numpy as np
@@ -77,6 +115,17 @@ class RidelGUI:
         self.add_workflow_step(workflow_layout2, "<b>Step 6: Show Detailed Results</b>", "Show a detailed table with distances, errors, and equations.", self.onShowDetailedResults, is_final_step=True)
         stage2_layout.addWidget(workflow_group2)
         self.vbox.addWidget(stage2_group)
+
+        # ===== EXPORT FOR RSTUDIO =====
+        if _rstudio_wrapper:
+            _rstudio_wrapper.install_export_button_for(
+                gui=self.main_widget,
+                parent_layout=self.vbox,
+                method="Ridel",
+                variant="auto",
+                table_widget=None,
+            )
+
         self.vbox.addStretch()
         self.main_widget.show()
         self.prediction_dialog = None
