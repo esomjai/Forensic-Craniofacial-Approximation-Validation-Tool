@@ -82,16 +82,24 @@ class RStudioExporter(object):
     def choose_folder(self, parent=None):
         if not qt:
             return self.folder
-        chosen = qt.QFileDialog.getExistingDirectory(
-            parent, "Choose export folder", self.folder)
-        if chosen:
-            self.folder = chosen
-            if self._settings:
-                self._settings.setValue("RStudioExporter/folder", chosen)
-            try:
-                os.makedirs(self.folder, exist_ok=True)
-            except Exception:
-                pass
+        dlg = qt.QFileDialog(parent)
+        dlg.setWindowTitle("Choose export folder")
+        dlg.setDirectory(self.folder)
+        dlg.setFileMode(qt.QFileDialog.Directory)
+        dlg.setOption(qt.QFileDialog.ShowDirsOnly, True)
+        dlg.setWindowFlags(
+            dlg.windowFlags() | qt.Qt.WindowStaysOnTopHint)
+        if dlg.exec_():
+            chosen = dlg.selectedFiles()[0]
+            if chosen:
+                self.folder = chosen
+                if self._settings:
+                    self._settings.setValue(
+                        "RStudioExporter/folder", chosen)
+                try:
+                    os.makedirs(self.folder, exist_ok=True)
+                except Exception:
+                    pass
         return self.folder
 
     # ---------- subject ID + code version ----------
@@ -108,8 +116,11 @@ class RStudioExporter(object):
                         QLineEdit, QFormLayout, QPixmap, Qt,
                         QPushButton)
 
+        
         dialog = QDialog(parent)
         dialog.setWindowTitle("Subject ID and Code Version")
+        dialog.setWindowFlags(
+            dialog.windowFlags() | qt.Qt.WindowStaysOnTopHint)
         dialog.setMinimumSize(520, 320)
         dialog.resize(520, 360)
 
@@ -553,12 +564,20 @@ def install_export_button_for(gui,
         if not sid:
             return
 
-        if qt.QMessageBox.question(
-            gui, "Export folder",
-            f"Export to:\n{ex.folder}\n\nChange folder?",
-            qt.QMessageBox.Yes | qt.QMessageBox.No,
-            qt.QMessageBox.No
-        ) == qt.QMessageBox.Yes:
+        # --- folder confirmation that stays on top ---
+        folder_dlg = qt.QMessageBox(gui)
+        folder_dlg.setWindowTitle("Export folder")
+        folder_dlg.setText(
+            f"Export to:\n{ex.folder}\n\nChange folder?")
+        folder_dlg.setIcon(qt.QMessageBox.Question)
+        folder_dlg.setStandardButtons(
+            qt.QMessageBox.Yes | qt.QMessageBox.No)
+        folder_dlg.setDefaultButton(qt.QMessageBox.No)
+        # Force on top of the pinned GUI
+        folder_dlg.setWindowFlags(
+            folder_dlg.windowFlags() | qt.Qt.WindowStaysOnTopHint)
+        reply = folder_dlg.exec_()
+        if reply == qt.QMessageBox.Yes:
             ex.choose_folder(gui)
 
         resolved_variant = variant
@@ -592,11 +611,19 @@ def install_export_button_for(gui,
             subject_id=sid, method=method, variant=resolved_variant,
             code_version=version, pairs=pairs)
 
-        slicer.util.infoDisplay(
+        # --- success popup that stays on top ---
+        info_dlg = qt.QMessageBox(gui)
+        info_dlg.setWindowTitle("Export Complete")
+        info_dlg.setText(
             f"Exported for subject {sid} (version {version}):\n"
             f"  measurement.csv → {n_meas} rows\n"
             f"  RStudio.csv     → {n_studio} rows\n\n"
             f"Folder: {ex.folder}")
+        info_dlg.setIcon(qt.QMessageBox.Information)
+        info_dlg.setStandardButtons(qt.QMessageBox.Ok)
+        info_dlg.setWindowFlags(
+            info_dlg.windowFlags() | qt.Qt.WindowStaysOnTopHint)
+        info_dlg.exec_()
 
     button.clicked.connect(on_click)
     parent_layout.addWidget(button)
