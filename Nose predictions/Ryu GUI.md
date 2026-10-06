@@ -1,4 +1,41 @@
 ```python
+# ==================================================================
+#  Bootstrap: load RStudio_wrapper from GitHub
+# ==================================================================
+import os, sys, importlib.util
+import urllib.request
+import tempfile
+
+RSTUDIO_EXPORT_URL = (
+    "https://raw.githubusercontent.com/esomjai/"
+    "Forensic-Craniofacial-Approximation-Validation-Tool/"
+    "refs/heads/basics/Start%20here%20/RStudio_wrapper.py"
+)
+
+def _load_rstudio_wrapper(url=RSTUDIO_EXPORT_URL):
+    cache_dir = os.path.join(tempfile.gettempdir(),
+                             "slicer_rstudio_wrapper")
+    os.makedirs(cache_dir, exist_ok=True)
+    cache_file = os.path.join(cache_dir, "rStudio_wrapper.py")
+    try:
+        with urllib.request.urlopen(url, timeout=15) as r:
+            data = r.read()
+        with open(cache_file, "wb") as f:
+            f.write(data)
+        print(f"[rstudio_wrapper] downloaded {len(data)} bytes")
+    except Exception as e:
+        print(f"[rstudio_wrapper] download failed: {e}")
+        if not os.path.exists(cache_file):
+            print("[rstudio_wrapper] no cache; export button disabled")
+            return None
+    spec = importlib.util.spec_from_file_location(
+        "rstudio_wrapper", cache_file)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["rstudio_wrapper"] = module
+    spec.loader.exec_module(module)
+    return module
+
+_rstudio_wrapper = _load_rstudio_wrapper()
 
 import slicer
 import qt
@@ -177,6 +214,16 @@ class RyuGUI:
                             "Displays a table with final 3D errors for each landmark.",
                             self.show_landmark_error_table, is_final_step=True)
         stage4_main_layout.addWidget(stage5_group)
+
+        # ===== EXPORT FOR RSTUDIO =====
+        if _rstudio_wrapper:
+            _rstudio_wrapper.install_export_button_for(
+                gui=self.main_widget,
+                parent_layout=stage4_main_layout,
+                method="Ryu",
+                variant="auto",
+                table_widget=None,
+            )
 
         # Visualization tools
         viz_group = qt.QGroupBox("Visualization Tools")
