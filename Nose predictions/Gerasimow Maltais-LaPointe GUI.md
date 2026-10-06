@@ -784,24 +784,75 @@ class GerasimowNosePredictor(qt.QWidget):
 
         layout.addWidget(shortcutGroup)
 
-        # Tangent Generation Section
+        # Tangent Generation Section — one empty-node button per tangent
         tangentGroup = qt.QGroupBox("Tangent Line Generation")
         tangentLayout = qt.QVBoxLayout(tangentGroup)
 
-        self.regenTangentsButton = qt.QPushButton(
-            "🔄 Generate Default Tangents (T1, T2, T3)"
+        tangentIntro = qt.QLabel(
+            "Click a button below to create an <b>empty line node</b> for that "
+            "tangent. The node will be selected in the Markups module; then:<br>"
+            "1. Click Slicer's <b>Place point</b> button (the small dot icon in "
+            "the Markups toolbar)<br>"
+            "2. Click twice in the 3D view to define the line's two endpoints<br>"
+            "3. Repeat for each tangent, then click <b>Refresh Tangent Status</b> "
+            "to register the points."
         )
-        self.regenTangentsButton.setStyleSheet(
+        tangentIntro.setTextFormat(qt.Qt.RichText)
+        tangentIntro.setWordWrap(True)
+        tangentLayout.addWidget(tangentIntro)
+
+        self.createEmptyT1Button = qt.QPushButton(
+            "📏 Create Empty T1 Line (Yellow — last third of nasal bone)"
+        )
+        self.createEmptyT1Button.setStyleSheet(
+            "background-color: #FFD700; color: black; font-weight: bold; padding: 10px;"
+        )
+        self.createEmptyT1Button.clicked.connect(self.onCreateEmptyT1)
+        tangentLayout.addWidget(self.createEmptyT1Button)
+
+        self.createEmptyT2Button = qt.QPushButton(
+            "📏 Create Empty T2 Line (Green — anterior nasal spine direction)"
+        )
+        self.createEmptyT2Button.setStyleSheet(
+            "background-color: #4CAF50; color: white; font-weight: bold; padding: 10px;"
+        )
+        self.createEmptyT2Button.clicked.connect(self.onCreateEmptyT2)
+        tangentLayout.addWidget(self.createEmptyT2Button)
+
+        self.createEmptyT3Button = qt.QPushButton(
+            "📏 Create Empty T3 Line (Blue — last 1–2 mm of nasal bone)"
+        )
+        self.createEmptyT3Button.setStyleSheet(
             "background-color: #2196F3; color: white; font-weight: bold; padding: 10px;"
         )
+        self.createEmptyT3Button.clicked.connect(self.onCreateEmptyT3)
+        tangentLayout.addWidget(self.createEmptyT3Button)
+
+        # Refresh button to pull control points back into self.tangents
+        self.refreshT1T2T3Button = qt.QPushButton("🔄 Refresh Tangent Status (T1/T2/T3)")
+        self.refreshT1T2T3Button.setStyleSheet(
+            "background-color: #607D8B; color: white; padding: 8px;"
+        )
+        self.refreshT1T2T3Button.clicked.connect(self.updateT1T2T3StatusFromExistingLines)
+        tangentLayout.addWidget(self.refreshT1T2T3Button)
+
+        # Fallback: still allow the old auto-generated default tangents
+        self.regenTangentsButton = qt.QPushButton(
+            "⚙ Fallback: Generate Default Tangents (T1, T2, T3)"
+        )
+        self.regenTangentsButton.setStyleSheet(
+            "background-color: #B0BEC5; color: white; padding: 6px;"
+        )
         self.regenTangentsButton.setToolTip(
-            "Create T1, T2, T3 using default positions on the current plane"
+            "Generate rough default positions and adjust them manually. "
+            "Use only if you prefer not to place tangents from scratch."
         )
         self.regenTangentsButton.clicked.connect(self.onRegenerateTangentsClicked)
         tangentLayout.addWidget(self.regenTangentsButton)
 
         self.tangentInstructionLabel = qt.QLabel(
-            "Click the button above to create tangent lines."
+            "Ready. Create the empty lines above, then place their points "
+            "in the 3D view."
         )
         self.tangentInstructionLabel.setStyleSheet(
             "font-style: italic; color: #555555; padding: 5px;"
@@ -938,6 +989,60 @@ class GerasimowNosePredictor(qt.QWidget):
 
         self.stepStack.addWidget(widget)
     
+    def onCreateEmptyT1(self):
+        """Create an empty T1 line node (user adds points manually)."""
+        self.createEmptyLineNode("T1", [1.0, 0.84, 0.0])
+
+    def onCreateEmptyT2(self):
+        """Create an empty T2 line node (user adds points manually)."""
+        self.createEmptyLineNode("T2", [0.0, 1.0, 0.0])
+
+    def onCreateEmptyT3(self):
+        """Create an empty T3 line node (user adds points manually)."""
+        self.createEmptyLineNode("T3", [0.2, 0.4, 1.0])
+
+    def updateT1T2T3StatusFromExistingLines(self):
+        """Read T1/T2/T3 line nodes from the scene and update self.tangents.
+        Called from the 'Refresh Tangent Status' button."""
+        names = ["T1", "T2", "T3"]
+        ready = []
+
+        for name in names:
+            node = self.tangentNodes.get(name)
+            if node is None or node.GetScene() != slicer.mrmlScene:
+                try:
+                    node = slicer.util.getNode(name)
+                    self.tangentNodes[name] = node
+                except slicer.util.MRMLNodeNotFoundException:
+                    self.log(f"{name}: not found in scene")
+                    continue
+
+            n_points = node.GetNumberOfControlPoints()
+            if n_points >= 2:
+                start = [0.0, 0.0, 0.0]
+                end = [0.0, 0.0, 0.0]
+                node.GetNthControlPointPositionWorld(0, start)
+                node.GetNthControlPointPositionWorld(1, end)
+                self.tangents[name] = {"start": list(start), "end": list(end)}
+                ready.append(name)
+                self.log(f"{name}: {n_points} point(s) — registered")
+            else:
+                self.log(f"{name}: only {n_points} point(s) — needs 2")
+
+        # Update the step's status label to reflect progress
+        if not ready:
+            self.step5StatusLabel.setText(
+                "Status: No tangents registered yet. Create the empty T1/T2/T3 "
+                "lines and place 2 points on each."
+            )
+        else:
+            self.step5StatusLabel.setText(
+                "Status: Registered tangents: " + ", ".join(ready) +
+                ". Add points to any missing tangent, then click Refresh again."
+            )
+        self.raise_()
+        self.activateWindow()
+
     def onCreateEmptyT4R(self):
         """Create an empty T4R line node (user adds points manually)"""
         self.createEmptyLineNode("T4R", [0.7, 0.4, 0.9])
@@ -968,7 +1073,15 @@ class GerasimowNosePredictor(qt.QWidget):
         
         # Store reference
         self.tangentNodes[name] = lineNode
-        
+        # Select the node in the Markups module so its 'Place point'
+        # button becomes available in the toolbar.
+        slicer.modules.markups.logic().SetActiveListID(lineNode)
+        slicer.util.selectModule('Markups')
+        # Also switch the interaction node to placement mode so the
+        # next two clicks in the 3D view define the line's endpoints.
+        interactionNode = slicer.app.applicationLogic().GetInteractionNode()
+        interactionNode.SetCurrentInteractionMode(slicer.vtkMRMLInteractionNode.Place)
+        interactionNode.SetPlaceModePersistence(0)  # exit after one line
         self.log(f"Created empty {name} line node")
         self.stepStatusLabel.setText(f"📍 Created empty {name} line. Use Markups tools to add control points.")
         
@@ -1646,6 +1759,9 @@ class GerasimowNosePredictor(qt.QWidget):
     def onT1T2ShortcutToggled(self, checked):
         """Toggle T1-T2 shortcut mode"""
         self.t4Group.setVisible(not checked)
+        # In shortcut mode T3 is not used — hide its button
+        if hasattr(self, 'createEmptyT3Button'):
+            self.createEmptyT3Button.setVisible(not checked)
         if checked:
             self.log("T1-T2 Shortcut mode enabled")
             self.tangentInstructionLabel.setText(
