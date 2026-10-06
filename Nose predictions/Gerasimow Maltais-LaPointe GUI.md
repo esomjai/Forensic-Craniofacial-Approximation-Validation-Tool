@@ -74,44 +74,57 @@ class GerasimowNosePredictor(qt.QWidget):
         mainLayout.addWidget(separator)
         
         # ==================== SCROLLABLE CONTENT ====================
+        # Only the step widgets live inside the scroll area. The status
+        # label and decision log are pinned below it so they stay visible.
         self.scrollArea = qt.QScrollArea()
         self.scrollArea.setWidgetResizable(True)
-        self.scrollArea.setMinimumHeight(50)
+        self.scrollArea.setFrameShape(qt.QFrame.NoFrame)
+        self.scrollArea.setHorizontalScrollBarPolicy(qt.Qt.ScrollBarAlwaysOff)
+        self.scrollArea.setVerticalScrollBarPolicy(qt.Qt.ScrollBarAsNeeded)
         self.scrollArea.setSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Expanding)
-        
+        self.scrollArea.setMinimumHeight(120)
+
         scrollContent = qt.QWidget()
         scrollLayout = qt.QVBoxLayout(scrollContent)
         scrollLayout.setContentsMargins(0, 0, 0, 0)
-        scrollLayout.setSpacing(10)
-        
-        # Step stack
+        scrollLayout.setSpacing(0)
+
+        # Step stack — Expanding on both axes so it fills the viewport;
+        # the scroll area handles any overflow. No stretch below it.
         self.stepStack = qt.QStackedWidget()
-        self.stepStack.setSizePolicy(qt.QSizePolicy.Preferred, qt.QSizePolicy.Preferred)
+        self.stepStack.setSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Expanding)
 
         scrollLayout.addWidget(self.stepStack)
-        
-        # Status label
+
+        self.scrollArea.setWidget(scrollContent)
+        mainLayout.addWidget(self.scrollArea, 1)   # stretch=1: takes all spare space
+
+        # ==================== PINNED STATUS BAR ====================
         self.stepStatusLabel = qt.QLabel("Ready")
         self.stepStatusLabel.setWordWrap(True)
-        self.stepStatusLabel.setStyleSheet("padding: 8px; background-color: #f0f0f0; border-radius: 5px; font-weight: bold;")
-        scrollLayout.addWidget(self.stepStatusLabel)
-        
+        self.stepStatusLabel.setStyleSheet(
+            "padding: 8px; background-color: #f0f0f0; "
+            "border-radius: 5px; font-weight: bold;"
+        )
+        mainLayout.addWidget(self.stepStatusLabel)
 
-        # Optional decision log
-        logGroupBox = qt.QGroupBox("Decision Log (click to expand/collapse)")
-        logGroupBox.setCheckable(True)
-        logGroupBox.setChecked(False)
-        logGroupBox.setMaximumHeight(150)
-        logLayout = qt.QVBoxLayout(logGroupBox)
+        # ==================== PINNED DECISION LOG ====================
+        self.logGroupBox = qt.QGroupBox("Decision Log (click to expand/collapse)")
+        self.logGroupBox.setCheckable(True)
+        self.logGroupBox.setChecked(False)
+        # Don't cap the group box height; let the inner text edit cap itself.
+        logLayout = qt.QVBoxLayout(self.logGroupBox)
         logLayout.setContentsMargins(5, 5, 5, 5)
         self.logWidget = qt.QTextEdit()
         self.logWidget.setReadOnly(True)
+        self.logWidget.setMinimumHeight(60)
         self.logWidget.setMaximumHeight(120)
         logLayout.addWidget(self.logWidget)
-        scrollLayout.addWidget(logGroupBox)
-        scrollLayout.addStretch(1)          # ← add this line
-        self.scrollArea.setWidget(scrollContent)
-        mainLayout.addWidget(self.scrollArea)
+        self.logGroupBox.toggled.connect(
+            lambda checked: self.logWidget.setVisible(checked)
+        )
+        self.logWidget.setVisible(False)   # start collapsed
+        mainLayout.addWidget(self.logGroupBox)        
         
         self.decisions = []
         self.log("Starting Two-Tangent Method")
@@ -148,10 +161,21 @@ class GerasimowNosePredictor(qt.QWidget):
         # Create all step widgets
         self.createAllStepWidgets()
 
-        # Size
-        self.mainWidget.setMinimumSize(520, 300)
-        self.mainWidget.resize(560, 680)
-        self.mainWidget.setMaximumSize(850, 1200)
+        # Size — pick a sensible default and cap the height to the
+        # available screen so the window never exceeds the desktop.
+        self.mainWidget.setMinimumSize(520, 320)
+
+        # Try to fit the screen; fall back to 700 px if unavailable.
+        try:
+            screen = qt.QApplication.desktop().availableGeometry(self.mainWidget)
+            max_h = max(400, screen.height() - 80)   # leave room for taskbar
+            max_w = max(520, screen.width() - 80)
+        except Exception:
+            max_h = 900
+            max_w = 1100
+
+        self.mainWidget.setMaximumSize(max_w, max_h)
+        self.mainWidget.resize(min(600, max_w), min(720, max_h))
 
         # Dependencies & scene
         self.checkDependencies()
@@ -550,10 +574,11 @@ class GerasimowNosePredictor(qt.QWidget):
         methodLabel.setStyleSheet("font-size: 14px; color: #2196F3;")
         self.step4ContentLayout.addWidget(methodLabel)
         
-        # Create scroll area for detailed instructions
-        self.scrollArea = qt.QScrollArea()
-        scrollArea.setWidgetResizable(True)
-        scrollArea.setMaximumHeight(400)
+       
+        self.step4ScrollArea = qt.QScrollArea()
+        self.step4ScrollArea.setWidgetResizable(True)
+        self.step4ScrollArea.setMaximumHeight(400)
+        scrollArea = self.step4ScrollArea
         instructions_container = qt.QWidget()
         instructions_layout = qt.QVBoxLayout(instructions_container)
         instructions_layout.setContentsMargins(5, 5, 5, 5)
@@ -1470,21 +1495,11 @@ class GerasimowNosePredictor(qt.QWidget):
                     "Tangents", "R2 Placement", "Results"]
         self.stepStatusLabel.setText(f"📍 Current: {step_names[self.currentStep]} - Follow instructions above")
 
-        # Resize the window to fit the current step's content
         current_page = self.stepStack.currentWidget()
         if current_page is not None:
-            current_page.adjustSize()
-            hint = current_page.sizeHint          # QSize
-            step_height = hint.height()           # int — slot call
+            current_page.updateGeometry()
+        self.mainWidget.layout().activate()
 
-            chrome_height = 200
-
-            total_height = step_height + chrome_height
-            total_height = max(total_height, 400)
-            total_height = min(total_height, 900)
-
-            self.mainWidget.resize(self.mainWidget.width, total_height)  # width — property
-    
     def validateCurrentStep(self):
         """Validate current step before moving to next"""
         if self.currentStep == 0:
