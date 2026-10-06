@@ -1,4 +1,42 @@
 ```python
+# ==================================================================
+#  Bootstrap: load RStudio_wrapper from GitHub
+# ==================================================================
+import os, sys, importlib.util
+import urllib.request
+import tempfile
+
+RSTUDIO_EXPORT_URL = (
+    "https://raw.githubusercontent.com/esomjai/"
+    "Forensic-Craniofacial-Approximation-Validation-Tool/"
+    "refs/heads/basics/Start%20here%20/RStudio_wrapper.py"
+)
+
+def _load_rstudio_wrapper(url=RSTUDIO_EXPORT_URL):
+    cache_dir = os.path.join(tempfile.gettempdir(),
+                             "slicer_rstudio_wrapper")
+    os.makedirs(cache_dir, exist_ok=True)
+    cache_file = os.path.join(cache_dir, "rStudio_wrapper.py")
+    try:
+        with urllib.request.urlopen(url, timeout=15) as r:
+            data = r.read()
+        with open(cache_file, "wb") as f:
+            f.write(data)
+        print(f"[rstudio_wrapper] downloaded {len(data)} bytes")
+    except Exception as e:
+        print(f"[rstudio_wrapper] download failed: {e}")
+        if not os.path.exists(cache_file):
+            print("[rstudio_wrapper] no cache; export button disabled")
+            return None
+    spec = importlib.util.spec_from_file_location(
+        "rstudio_wrapper", cache_file)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["rstudio_wrapper"] = module
+    spec.loader.exec_module(module)
+    return module
+
+_rstudio_wrapper = _load_rstudio_wrapper()
+
 import urllib.request
 import tempfile
 import os
@@ -6,7 +44,8 @@ import numpy as np
 import qt
 import slicer
 
-class GerasimowNosePredictor(qt.QWidget):
+
+class GerasimovNosePredictor(qt.QWidget):
     def __init__(self, parent=None):
         qt.QWidget.__init__(self, parent)
         
@@ -23,7 +62,7 @@ class GerasimowNosePredictor(qt.QWidget):
         
         self.mainWidget = qt.QWidget()
         self.mainWidget.setWindowTitle("Gerasimov's Nose Prediction (with Maltais-LaPointe's 3D adjustment)")
-        self.mainWidget.setObjectName("GerasimowNosePredictor")
+        self.mainWidget.setObjectName("GerasimovNosePredictor")
         # Pinned by default
         self.mainWidget.setWindowFlags(
             self.mainWidget.windowFlags() | qt.Qt.WindowStaysOnTopHint
@@ -310,7 +349,7 @@ class GerasimowNosePredictor(qt.QWidget):
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(12)
 
-        title = qt.QLabel("Welcome to Gerasimow's Nose Prediction Method")
+        title = qt.QLabel("Welcome to Gerasimov's Nose Prediction Method")
         title.setStyleSheet("font-weight: bold; font-size: 16px;")
         title.setAlignment(qt.Qt.AlignCenter)
         layout.addWidget(title)
@@ -1403,7 +1442,7 @@ class GerasimowNosePredictor(qt.QWidget):
         else:
             self.r2StatusLabel.setText(
                 "R2 Status: NOT FOUND.\n\n"
-                "Please add a point labeled 'R2' to your Gerasimow_landmarks node.\n"
+                "Please add a point labeled 'R2' to your Gerasimov_landmarks node.\n"
                 "Use Slicer's Markups tools to add the point where T4 crosses the soft tissue."
             )
             self.r2StatusLabel.setStyleSheet("padding: 10px; background-color: #ffcccc; border-radius: 5px;")
@@ -1693,6 +1732,16 @@ class GerasimowNosePredictor(qt.QWidget):
             "padding: 10px; background-color: #f0f0f0; border-radius: 5px;"
         )
         layout.addWidget(self.step7StatusLabel)
+        
+        # ===== EXPORT FOR RSTUDIO =====
+        if _rstudio_wrapper:
+            _rstudio_wrapper.install_export_button_for(
+                gui=self.mainWidget,
+                parent_layout=layout,
+                method="Gerasimow",
+                variant="auto",
+                table_widget=self.measurementsTable,
+            )
 
         layout.addStretch(1)
 
@@ -2040,7 +2089,7 @@ class GerasimowNosePredictor(qt.QWidget):
                     except:
                         pass
         
-        self.log("Finishing Gerasimow's nose prediction workflow")
+        self.log("Finishing Gerasimov's nose prediction workflow")
         self.mainWidget.close()
     
     # ========================================================================
@@ -2051,10 +2100,10 @@ class GerasimowNosePredictor(qt.QWidget):
         self.log("Checking scene for existing nodes...")
         
         # Check for landmarks
-        landmarksNode = slicer.util.getFirstNodeByName("Gerasimow_landmarks")
+        landmarksNode = slicer.util.getFirstNodeByName("Gerasimov_landmarks")
         if landmarksNode:
             self.landmarksNode = landmarksNode
-            self.step1StatusLabel.setText("Status: Found existing 'Gerasimow_landmarks'.")
+            self.step1StatusLabel.setText("Status: Found existing 'Gerasimov_landmarks'.")
         
         # Check for plane
         planeNode = slicer.util.getFirstNodeByName("INB") or slicer.util.getFirstNodeByName("MSP")
@@ -2226,7 +2275,7 @@ class GerasimowNosePredictor(qt.QWidget):
             
             loadedNode = slicer.util.loadMarkups(tempFilePath)
             if loadedNode:
-                loadedNode.SetName("Gerasimow_landmarks")
+                loadedNode.SetName("Gerasimov_landmarks")
                 self.landmarksNode = loadedNode
                 self.step1StatusLabel.setText("Status: Successfully downloaded and loaded landmarks!")
                 self.log("Downloaded landmarks from GitHub")
@@ -2243,7 +2292,7 @@ class GerasimowNosePredictor(qt.QWidget):
         if fileName:
             loadedNode = slicer.util.loadMarkups(fileName)
             if loadedNode:
-                loadedNode.SetName("Gerasimow_landmarks")
+                loadedNode.SetName("Gerasimov_landmarks")
                 self.landmarksNode = loadedNode
                 self.step1StatusLabel.setText("Status: Successfully loaded local landmarks!")
                 self.log(f"Loaded landmarks from {fileName}")
@@ -2357,14 +2406,14 @@ def enable_sequential_mode(callback=None):
     
     # Modify the GUI to add completion button if not already there
     if hasattr(gui, 'finishButton'):
-        gui.finishButton.setText("✓ Complete Gerasimow & Continue")
+        gui.finishButton.setText("✓ Complete Gerasimov & Continue")
         gui.finishButton.setStyleSheet("background-color: #4CAF50; color: white; font-weight: bold; padding: 12px;")
         
         # Store original onFinish and replace with sequential version
         original_onFinish = gui.onFinish
         
         def sequential_finish():
-            print("Gerasimow completed, continuing to next tool...")
+            print("Gerasimov completed, continuing to next tool...")
             original_onFinish()
             if next_callback:
                 next_callback()
@@ -2374,6 +2423,6 @@ def enable_sequential_mode(callback=None):
 
 # Auto-run if script is executed directly
 if __name__ == "__main__":
-    gui = GerasimowNosePredictor()
+    gui = GerasimovNosePredictor()
 
 ```
