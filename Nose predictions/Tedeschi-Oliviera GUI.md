@@ -7,9 +7,7 @@ import urllib.request
 import tempfile
 
 RSTUDIO_EXPORT_URL = (
-    "https://raw.githubusercontent.com/esomjai/"
-    "Forensic-Craniofacial-Approximation-Validation-Tool/"
-    "refs/heads/basics/Start%20here/rStudio_wrapper.py"
+    "https://raw.githubusercontent.com/esomjai/Forensic-Craniofacial-Approximation-Validation-Tool/refs/heads/basics/Start%20here%20/Export_tool.py"
 )
 
 def _load_rstudio_wrapper(url=RSTUDIO_EXPORT_URL):
@@ -231,7 +229,7 @@ class TedeschiOlivieraGUI:
         self.copyButton.clicked.connect(self.copyMeasurementsToClipboard)
         step5Layout.addWidget(self.copyButton, 0, qt.Qt.AlignHCenter)
         mainLayout.addWidget(step5GroupBox)
-        
+
         # ===== EXPORT FOR RSTUDIO =====
         if _rstudio_wrapper:
             _rstudio_wrapper.install_export_button_for(
