@@ -1,30 +1,23 @@
 # ==================================================================
-# rstudio_export.py — Universal RStudio Export Wrapper
+# RStudio_wrapper.py — Universal RStudio Export Wrapper
 # ------------------------------------------------------------------
-# Drop this file somewhere on your Python path (or the same folder
-# as your GUI scripts) and add two lines to the top of each GUI:
+# Loaded by GUI scripts via a bootstrap that fetches this file from
+# GitHub into a temp cache and imports it under the name
+# "rstudio_wrapper".
 #
-#     import sys
-#     sys.path.append(r"D:\001_PhD\Scripts")
-#     from rstudio_export import install_export_button_for
+# Usage in a GUI script:
 #
-# Then, in the last step of the GUI:
-#
-#     install_export_button_for(
-#         gui=self,
-#         parent_layout=some_layout,
-#         method="TedeschiOliviera",   # or "auto" for detection
-#     )
-#
-# The wrapper handles:
-#   • Subject ID prompt (once per session, with code-version reference image)
-#   • Code version prompt (once per session)
-#   • Folder picker with persistence across Slicer sessions
-#   • Appending to shared measurement.csv + RStudio.csv
-#   • Method-specific pair/measurement providers for all ten GUIs
+#     if _rstudio_wrapper:
+#         _rstudio_wrapper.install_export_button_for(
+#             gui=self.mainWidget,
+#             parent_layout=mainLayout,
+#             method="TedeschiOliviera",
+#             variant="auto",
+#             table_widget=self.resultsTable,
+#         )
 # ==================================================================
 
-import os, csv, re, datetime
+import os, csv, re
 import numpy as np
 
 try:
@@ -39,8 +32,8 @@ except ImportError:
 #  Version-guide image — shown in the ID prompt dialog
 # ------------------------------------------------------------------
 CODE_VERSION_IMAGE_URL = (
-    "https://github.com/esomjai/"
-    "Forensic-Craniofacial-Approximation-Validation-Tool/raw/"
+    "https://raw.githubusercontent.com/esomjai/"
+    "Forensic-Craniofacial-Approximation-Validation-Tool/"
     "2b64cc450d409ad1dfc19e00d8c6062e4b284fee/"
     "Nose%20predictions/images/"
     "Screenshot%202026-10-06%20111753.png"
@@ -103,70 +96,99 @@ class RStudioExporter(object):
 
     # ---------- subject ID + code version ----------
     def prompt_identity(self, parent=None):
-        """Single dialog that asks for subject ID and code version,
-        showing the reference image for the version codes."""
+        """Custom dialog with a manual button row. This avoids a
+        PythonQt quirk where QDialogButtonBox fails to render below
+        a large image."""
         if self._subject_id and self._code_version:
             return self._subject_id, self._code_version
         if not qt:
             return None, None
 
-        dialog = qt.QDialog(parent)
-        dialog.setWindowTitle("Subject ID and Code Version")
-        dialog.setMinimumWidth(520)
+        from qt import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
+                        QLineEdit, QFormLayout, QPixmap, Qt,
+                        QPushButton)
 
-        layout = qt.QVBoxLayout(dialog)
+        dialog = QDialog(parent)
+        dialog.setWindowTitle("Subject ID and Code Version")
+        dialog.setMinimumSize(560, 460)
+        dialog.resize(560, 560)
+
+        layout = QVBoxLayout(dialog)
+        layout.setSpacing(10)
+        layout.setContentsMargins(15, 15, 15, 15)
 
         # --- reference image ---
-        image_label = qt.QLabel()
-        image_label.setAlignment(qt.Qt.AlignCenter)
-        image_label.setText("Loading version reference image…")
+        image_label = QLabel()
+        image_label.setAlignment(Qt.AlignCenter)
+        image_label.setMinimumHeight(220)
+        image_label.setStyleSheet(
+            "background-color: #f5f5f5; border: 1px solid #cccccc;")
+        image_label.setText("Loading reference image...")
         layout.addWidget(image_label)
 
         try:
             import urllib.request
             with urllib.request.urlopen(CODE_VERSION_IMAGE_URL,
-                                        timeout=5) as r:
+                                        timeout=8) as r:
                 data = r.read()
-            pixmap = qt.QPixmap()
+            pixmap = QPixmap()
             pixmap.loadFromData(data)
             if not pixmap.isNull():
-                max_w = 480
-                if pixmap.width() > max_w:
+                if pixmap.width() > 520:
                     pixmap = pixmap.scaledToWidth(
-                        max_w, qt.Qt.SmoothTransformation)
+                        520, Qt.SmoothTransformation)
                 image_label.setPixmap(pixmap)
                 image_label.setText("")
+            else:
+                image_label.setText("[Image decoded as null pixmap]")
         except Exception as e:
-            image_label.setText(
-                f"[Could not load reference image]\n{e}\n\n"
-                f"See: {CODE_VERSION_IMAGE_URL}")
+            image_label.setText(f"[Could not load reference image]\n{e}")
 
         # --- form ---
-        form = qt.QFormLayout()
-
-        sid_edit = qt.QLineEdit()
+        form = QFormLayout()
+        sid_edit = QLineEdit()
         sid_edit.setPlaceholderText("e.g. 100749")
         if self._subject_id:
             sid_edit.setText(self._subject_id)
         form.addRow("Subject ID:", sid_edit)
 
-        version_edit = qt.QLineEdit()
-        version_edit.setPlaceholderText(
-            "Enter the code version shown in the image above")
+        version_edit = QLineEdit()
+        version_edit.setPlaceholderText("Enter code version")
         if self._code_version:
             version_edit.setText(self._code_version)
         form.addRow("Code version:", version_edit)
-
         layout.addLayout(form)
 
-        # --- buttons ---
-        btn_box = qt.QDialogButtonBox(
-            qt.QDialogButtonBox.Ok | qt.QDialogButtonBox.Cancel)
-        btn_box.accepted.connect(dialog.accept)
-        btn_box.rejected.connect(dialog.reject)
-        layout.addWidget(btn_box)
+        # --- manual button row ---
+        row = QHBoxLayout()
+        row.addStretch(1)
+        cancel_btn = QPushButton("Cancel")
+        ok_btn = QPushButton("OK")
+        ok_btn.setDefault(True)
+        ok_btn.setStyleSheet(
+            "background-color: #4CAF50; color: white; "
+            "font-weight: bold; padding: 6px 20px;")
+        cancel_btn.setStyleSheet("padding: 6px 20px;")
+        row.addWidget(cancel_btn)
+        row.addWidget(ok_btn)
+        layout.addLayout(row)
 
-        if dialog.exec_() != qt.QDialog.Accepted:
+        accepted = {"value": False}
+
+        def _accept():
+            accepted["value"] = True
+            dialog.accept()
+
+        def _cancel():
+            accepted["value"] = False
+            dialog.reject()
+
+        ok_btn.clicked.connect(_accept)
+        cancel_btn.clicked.connect(_cancel)
+
+        dialog.exec_()
+
+        if not accepted["value"]:
             return None, None
 
         sid = sid_edit.text.strip()
@@ -188,15 +210,13 @@ class RStudioExporter(object):
 
     # ---------- header management ----------
     def _ensure_header(self, path, header, aliases=None):
-        """Create file with header, or migrate an existing file that has
-        an older header missing 'code_version'."""
-        aliases = aliases or {}
+        """Create file with header, or migrate an existing file that
+        has an older header missing 'code_version'."""
         if not os.path.exists(path):
             os.makedirs(os.path.dirname(path), exist_ok=True)
             with open(path, "w", newline="") as f:
                 csv.writer(f).writerow(header)
             return
-        # check existing header
         with open(path, "r", newline="") as f:
             r = csv.reader(f)
             try:
@@ -205,7 +225,7 @@ class RStudioExporter(object):
                 existing = []
         if existing == header:
             return
-        # migration needed
+        # migrate
         with open(path, "r", newline="") as f:
             rows = list(csv.reader(f))
         old_header = rows[0] if rows else []
@@ -305,7 +325,6 @@ def _find_by_label(node, needles):
 
 
 def pairs_gerasimow():
-    """Tangent-combo error lines + shortcut."""
     pattern = re.compile(r"error_(prn|R2)_(T\d-T\d)_pred_error", re.I)
     out = []
     for n in slicer.util.getNodesByClass("vtkMRMLMarkupsLineNode"):
@@ -482,7 +501,6 @@ def pairs_prokopec():
                     t = [0.0, 0.0, 0.0]
                     soft.GetNthControlPointPositionWorld(true_idx, t)
                     out.append((f"outline_{true_idx+1}", p, t))
-    # Stephan pair, if present
     pred = None
     for n in slicer.util.getNodesByClass("vtkMRMLMarkupsFiducialNode"):
         if n.GetName().startswith("Stephan_pronasale"):
@@ -521,20 +539,6 @@ def install_export_button_for(gui,
                               measurement_provider=None,
                               button_label="Export for RStudio",
                               style=None):
-    """
-    Install a single 'Export for RStudio' button on any layout.
-
-    Parameters
-    ----------
-    gui                : the GUI instance (used as dialog parent)
-    parent_layout      : QLayout the button is added to
-    method             : one of the keys in PAIR_PROVIDERS
-    variant            : static str, or "auto" to derive from the scene
-    table_widget       : optional QTableWidget dumped into measurement.csv
-    measurement_provider: optional callable() -> [(name, value, unit), ...]
-    button_label       : button caption
-    style              : optional Qt stylesheet
-    """
     if not qt:
         return None
 
@@ -551,7 +555,6 @@ def install_export_button_for(gui,
         if not sid:
             return
 
-        # confirm / change folder
         if qt.QMessageBox.question(
             gui, "Export folder",
             f"Export to:\n{ex.folder}\n\nChange folder?",
@@ -560,7 +563,6 @@ def install_export_button_for(gui,
         ) == qt.QMessageBox.Yes:
             ex.choose_folder(gui)
 
-        # resolve variant
         resolved_variant = variant
         if variant == "auto":
             resolved_variant = _derive_variant(method)
@@ -570,7 +572,6 @@ def install_export_button_for(gui,
             except Exception:
                 resolved_variant = "auto"
 
-        # gather rows
         pairs = []
         try:
             pairs = PAIR_PROVIDERS.get(method, lambda: [])()
@@ -605,7 +606,6 @@ def install_export_button_for(gui,
 
 
 def _derive_variant(method):
-    """Auto-detect a sensible variant string from the loaded scene."""
     if method == "Stephan":
         if slicer.util.getFirstNodeByName("Pronasale_Stephan"):
             return "StandaloneGUI"
