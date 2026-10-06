@@ -307,13 +307,14 @@ class GerasimowNosePredictor(qt.QWidget):
         """Step 1: Welcome and Load Landmarks"""
         widget = qt.QWidget()
         layout = qt.QVBoxLayout(widget)
-        layout.setSpacing(15)
-        
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(12)
+
         title = qt.QLabel("Welcome to Gerasimow's Nose Prediction Method")
         title.setStyleSheet("font-weight: bold; font-size: 16px;")
         title.setAlignment(qt.Qt.AlignCenter)
         layout.addWidget(title)
-        
+
         desc = qt.QLabel(
             "This method predicts the pronasale (nose tip) position using tangent lines.\n\n"
             "Please begin by loading the required landmarks using one of the options below."
@@ -321,40 +322,54 @@ class GerasimowNosePredictor(qt.QWidget):
         desc.setWordWrap(True)
         desc.setAlignment(qt.Qt.AlignCenter)
         layout.addWidget(desc)
-        
+
         buttonLayout = qt.QVBoxLayout()
         buttonLayout.setSpacing(10)
-        
+
         self.downloadButton = qt.QPushButton("📥 Download Landmarks from GitHub")
-        self.downloadButton.setStyleSheet("background-color: #4CAF50; color: white; font-weight: bold; padding: 10px;")
+        self.downloadButton.setStyleSheet(
+            "background-color: #4CAF50; color: white; font-weight: bold; padding: 10px;"
+        )
         self.downloadButton.clicked.connect(self.onDownloadLandmarksClicked)
         buttonLayout.addWidget(self.downloadButton)
-        
+
         self.loadLocalButton = qt.QPushButton("📂 Load Landmarks from Local File")
-        self.loadLocalButton.setStyleSheet("background-color: #2196F3; color: white; font-weight: bold; padding: 10px;")
+        self.loadLocalButton.setStyleSheet(
+            "background-color: #2196F3; color: white; font-weight: bold; padding: 10px;"
+        )
         self.loadLocalButton.clicked.connect(self.onLoadLocalLandmarksClicked)
         buttonLayout.addWidget(self.loadLocalButton)
-        
+
         layout.addLayout(buttonLayout)
-        
+
         self.step1StatusLabel = qt.QLabel("Status: Waiting for landmarks to be loaded.")
         self.step1StatusLabel.setWordWrap(True)
-        self.step1StatusLabel.setStyleSheet("padding: 10px; background-color: #f0f0f0; border-radius: 5px;")
+        # Keep the status label compact — do not let it absorb vertical slack.
+        self.step1StatusLabel.setSizePolicy(
+            qt.QSizePolicy.Preferred, qt.QSizePolicy.Maximum
+        )
+        self.step1StatusLabel.setStyleSheet(
+            "padding: 10px; background-color: #f0f0f0; border-radius: 5px;"
+        )
         layout.addWidget(self.step1StatusLabel)
-        
-        
+
+        # Any leftover vertical space goes here, at the bottom of the step,
+        # instead of being absorbed by the widgets above.
+        layout.addStretch(1)
+
         self.stepStack.addWidget(widget)
     
     def createStep2_PlaneSetup(self):
         """Step 2: Create Reference Plane"""
         widget = qt.QWidget()
         layout = qt.QVBoxLayout(widget)
+        layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(15)
-        
+
         title = qt.QLabel("Step 2: Create a Reference Plane")
         title.setStyleSheet("font-weight: bold; font-size: 16px;")
         layout.addWidget(title)
-        
+
         desc_html = """
         <p>Create a reference plane for the tangent lines. You have two options:</p>
         <ul>
@@ -367,10 +382,10 @@ class GerasimowNosePredictor(qt.QWidget):
         desc.setTextFormat(qt.Qt.RichText)
         desc.setWordWrap(True)
         layout.addWidget(desc)
-        
+
         planeChoiceLayout = qt.QVBoxLayout()
         planeChoiceLayout.setSpacing(10)
-        
+
         self.landmarkBundleCombo = qt.QComboBox()
         self.landmarkBundleCombo.addItems([
             "Select a method...",
@@ -378,32 +393,42 @@ class GerasimowNosePredictor(qt.QWidget):
             "MSP (Midsagittal Best-Fit)"
         ])
         planeChoiceLayout.addWidget(self.landmarkBundleCombo)
-        
+
         self.createPlaneButton = qt.QPushButton("Create Plane")
-        self.createPlaneButton.setStyleSheet("background-color: #FFDF00; font-weight: bold; padding: 10px;")
+        self.createPlaneButton.setStyleSheet(
+            "background-color: #FFDF00; font-weight: bold; padding: 10px;"
+        )
         self.createPlaneButton.clicked.connect(self.onCreatePlaneClicked)
         planeChoiceLayout.addWidget(self.createPlaneButton)
-        
+
         layout.addLayout(planeChoiceLayout)
-        
+
         self.step2StatusLabel = qt.QLabel("Status: Please choose a plane creation method.")
         self.step2StatusLabel.setWordWrap(True)
-        self.step2StatusLabel.setStyleSheet("padding: 10px; background-color: #f0f0f0; border-radius: 5px;")
+        self.step2StatusLabel.setSizePolicy(
+            qt.QSizePolicy.Preferred, qt.QSizePolicy.Maximum
+        )
+        self.step2StatusLabel.setStyleSheet(
+            "padding: 10px; background-color: #f0f0f0; border-radius: 5px;"
+        )
         layout.addWidget(self.step2StatusLabel)
-        
-        self.stepStack.addWidget(widget)
-    
+
+        layout.addStretch(1)
+
+        self.stepStack.addWidget(widget)   
+
     def createStep3_Segmentation(self):
         """Step 3: Choose Visualization Method"""
         widget = qt.QWidget()
         mainLayout = qt.QVBoxLayout(widget)
+        mainLayout.setContentsMargins(10, 10, 10, 10)
         mainLayout.setSpacing(20)
-        
+
         title = qt.QLabel("Step 3: Choose Your Visualization Method")
         title.setStyleSheet("font-weight: bold; font-size: 16px;")
         title.setAlignment(qt.Qt.AlignCenter)
         mainLayout.addWidget(title)
-        
+
         intro = qt.QLabel(
             "You need to visualize the skull to place tangent lines accurately. "
             "Choose one of the two methods below:"
@@ -411,19 +436,22 @@ class GerasimowNosePredictor(qt.QWidget):
         intro.setWordWrap(True)
         intro.setAlignment(qt.Qt.AlignCenter)
         mainLayout.addWidget(intro)
-        
+
         mainLayout.addSpacing(20)
-        
+
         # Option 1: Manual Volume Rendering
         option1Group = qt.QGroupBox()
-        option1Group.setStyleSheet("QGroupBox { background-color: #E8F5E9; border: 2px solid #4CAF50; border-radius: 5px; padding: 15px; }")
+        option1Group.setStyleSheet(
+            "QGroupBox { background-color: #E8F5E9; border: 2px solid #4CAF50; "
+            "border-radius: 5px; padding: 15px; }"
+        )
         option1Layout = qt.QVBoxLayout(option1Group)
-        
+
         option1Title = qt.QLabel("<b>📌 Option 1: Quick Manual Method (Volume Rendering)</b>")
         option1Title.setTextFormat(qt.Qt.RichText)
         option1Title.setStyleSheet("font-size: 14px;")
         option1Layout.addWidget(option1Title)
-        
+
         option1Desc = qt.QLabel(
             "<b>Pros:</b> Fast, reversible, good for beginners<br>"
             "<b>Cons:</b> Temporary visualization only, not saved<br><br>"
@@ -432,30 +460,34 @@ class GerasimowNosePredictor(qt.QWidget):
         option1Desc.setTextFormat(qt.Qt.RichText)
         option1Desc.setWordWrap(True)
         option1Layout.addWidget(option1Desc)
-        
+
         self.chooseManualButton = qt.QPushButton("✓ Choose Manual Method")
-        self.chooseManualButton.setStyleSheet("background-color: #4CAF50; color: white; font-weight: bold; padding: 10px;")
+        self.chooseManualButton.setStyleSheet(
+            "background-color: #4CAF50; color: white; font-weight: bold; padding: 10px;"
+        )
         self.chooseManualButton.clicked.connect(self.onChooseManualMethod)
         option1Layout.addWidget(self.chooseManualButton)
-        
+
         mainLayout.addWidget(option1Group)
-        
-        # OR separator
+
         orLabel = qt.QLabel("<center><b>— OR —</b></center>")
         orLabel.setTextFormat(qt.Qt.RichText)
         orLabel.setStyleSheet("font-size: 14px; font-weight: bold;")
         mainLayout.addWidget(orLabel)
-        
+
         # Option 2: Automatic Segmentation
         option2Group = qt.QGroupBox()
-        option2Group.setStyleSheet("QGroupBox { background-color: #E3F2FD; border: 2px solid #2196F3; border-radius: 5px; padding: 15px; }")
+        option2Group.setStyleSheet(
+            "QGroupBox { background-color: #E3F2FD; border: 2px solid #2196F3; "
+            "border-radius: 5px; padding: 15px; }"
+        )
         option2Layout = qt.QVBoxLayout(option2Group)
-        
+
         option2Title = qt.QLabel("<b>🤖 Option 2: Permanent Segmentation Method</b>")
         option2Title.setTextFormat(qt.Qt.RichText)
         option2Title.setStyleSheet("font-size: 14px;")
         option2Layout.addWidget(option2Title)
-        
+
         option2Desc = qt.QLabel(
             "<b>Pros:</b> Creates permanent 3D model, can save and export<br>"
             "<b>Cons:</b> More steps, takes longer, requires more disk space<br><br>"
@@ -464,24 +496,32 @@ class GerasimowNosePredictor(qt.QWidget):
         option2Desc.setTextFormat(qt.Qt.RichText)
         option2Desc.setWordWrap(True)
         option2Layout.addWidget(option2Desc)
-        
+
         self.chooseSegmentationButton = qt.QPushButton("✓ Choose Segmentation Method")
-        self.chooseSegmentationButton.setStyleSheet("background-color: #2196F3; color: white; font-weight: bold; padding: 10px;")
+        self.chooseSegmentationButton.setStyleSheet(
+            "background-color: #2196F3; color: white; font-weight: bold; padding: 10px;"
+        )
         self.chooseSegmentationButton.clicked.connect(self.onChooseSegmentationMethod)
         option2Layout.addWidget(self.chooseSegmentationButton)
-        
+
         mainLayout.addWidget(option2Group)
-        
+
         mainLayout.addSpacing(20)
-        
+
         self.step3StatusLabel = qt.QLabel("Status: Please choose a visualization method above.")
         self.step3StatusLabel.setWordWrap(True)
-        self.step3StatusLabel.setStyleSheet("padding: 10px; background-color: #f0f0f0; border-radius: 5px;")
+        self.step3StatusLabel.setSizePolicy(
+            qt.QSizePolicy.Preferred, qt.QSizePolicy.Maximum
+        )
+        self.step3StatusLabel.setStyleSheet(
+            "padding: 10px; background-color: #f0f0f0; border-radius: 5px;"
+        )
         mainLayout.addWidget(self.step3StatusLabel)
-        
+
+        mainLayout.addStretch(1)
 
         self.stepStack.addWidget(widget)
-        
+
         # Store the chosen method
         self.chosenVisualizationMethod = None
     
@@ -489,23 +529,30 @@ class GerasimowNosePredictor(qt.QWidget):
         """Step 4: Execute the chosen visualization method"""
         widget = qt.QWidget()
         mainLayout = qt.QVBoxLayout(widget)
+        mainLayout.setContentsMargins(10, 10, 10, 10)
         mainLayout.setSpacing(15)
-        
+
         title = qt.QLabel("Step 4: Set Up Visualization")
         title.setStyleSheet("font-weight: bold; font-size: 16px;")
         mainLayout.addWidget(title)
-        
-        # This will be populated dynamically based on choice
+
+        # Populated dynamically based on Step 3 choice
         self.step4ContentWidget = qt.QWidget()
         self.step4ContentLayout = qt.QVBoxLayout(self.step4ContentWidget)
         mainLayout.addWidget(self.step4ContentWidget)
-        
+
         self.step4StatusLabel = qt.QLabel("Status: Complete Step 3 first to see instructions here.")
         self.step4StatusLabel.setWordWrap(True)
-        self.step4StatusLabel.setStyleSheet("padding: 10px; background-color: #f0f0f0; border-radius: 5px;")
+        self.step4StatusLabel.setSizePolicy(
+            qt.QSizePolicy.Preferred, qt.QSizePolicy.Maximum
+        )
+        self.step4StatusLabel.setStyleSheet(
+            "padding: 10px; background-color: #f0f0f0; border-radius: 5px;"
+        )
         mainLayout.addWidget(self.step4StatusLabel)
-        
-        
+
+        mainLayout.addStretch(1)
+
         self.stepStack.addWidget(widget)
     
     def populateStep4ForManualMethod(self):
@@ -671,23 +718,24 @@ class GerasimowNosePredictor(qt.QWidget):
         """Step 5: Create Tangent Lines"""
         widget = qt.QWidget()
         layout = qt.QVBoxLayout(widget)
+        layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(15)
-        
+
         title = qt.QLabel("Step 5: Create Tangent Lines")
         title.setStyleSheet("font-weight: bold; font-size: 16px;")
         layout.addWidget(title)
-        
+
         # Tangent Description Table
         tableGroup = qt.QGroupBox("Tangent Line Reference")
         tableLayout = qt.QVBoxLayout(tableGroup)
-        
-        # Create table
+
         self.tangentTable = qt.QTableWidget()
         self.tangentTable.setColumnCount(4)
-        self.tangentTable.setHorizontalHeaderLabels(["Tangent", "Description", "Name in Files", "Color"])
+        self.tangentTable.setHorizontalHeaderLabels(
+            ["Tangent", "Description", "Name in Files", "Color"]
+        )
         self.tangentTable.horizontalHeader().setStretchLastSection(True)
-        
-        # Set table data
+
         tangent_data = [
             ["Tangent 1", "Follows the last third of the nasal bone", "T1", "Yellow"],
             ["Tangent 2", "Follows the general direction of the anterior nasal spine", "T2", "Green"],
@@ -695,13 +743,12 @@ class GerasimowNosePredictor(qt.QWidget):
             ["Tangent 4 - Right", "Follows the nasal floor to the RIGHT of the anterior nasal spine", "T4R", "Purple"],
             ["Tangent 4 - Left", "Follows the nasal floor to the LEFT of the anterior nasal spine", "T4L", "Purple"]
         ]
-        
+
         self.tangentTable.setRowCount(len(tangent_data))
         for row, data in enumerate(tangent_data):
             for col, value in enumerate(data):
                 item = qt.QTableWidgetItem(value)
-                if col == 3:  # Color column
-                    # Set background color
+                if col == 3:
                     color_map = {
                         "Yellow": qt.QColor(255, 255, 100),
                         "Green": qt.QColor(100, 255, 100),
@@ -711,59 +758,74 @@ class GerasimowNosePredictor(qt.QWidget):
                     if value in color_map:
                         item.setBackground(color_map[value])
                 self.tangentTable.setItem(row, col, item)
-        
+
         self.tangentTable.setMinimumHeight(140)
         tableLayout.addWidget(self.tangentTable)
         layout.addWidget(tableGroup)
-        
+
         # T1-T2 Shortcut Section
         shortcutGroup = qt.QGroupBox("Quick Method: T1-T2 Shortcut")
         shortcutLayout = qt.QVBoxLayout(shortcutGroup)
-        
+
         shortcutDesc = qt.QLabel(
             "For a quick prediction using only T1 and T2 tangents, enable the shortcut below. "
             "This will hide the more complex T3, T4R, and T4L options."
         )
         shortcutDesc.setWordWrap(True)
         shortcutLayout.addWidget(shortcutDesc)
-        
+
         self.t1t2ShortcutCheckbox = qt.QCheckBox("Use T1-T2 Shortcut Mode")
-        self.t1t2ShortcutCheckbox.setToolTip("When enabled, only T1 and T2 tangents are used")
+        self.t1t2ShortcutCheckbox.setToolTip(
+            "When enabled, only T1 and T2 tangents are used"
+        )
         self.t1t2ShortcutCheckbox.setChecked(False)
         self.t1t2ShortcutCheckbox.toggled.connect(self.onT1T2ShortcutToggled)
         shortcutLayout.addWidget(self.t1t2ShortcutCheckbox)
-        
+
         layout.addWidget(shortcutGroup)
-        
+
         # Tangent Generation Section
         tangentGroup = qt.QGroupBox("Tangent Line Generation")
         tangentLayout = qt.QVBoxLayout(tangentGroup)
-        
-        self.regenTangentsButton = qt.QPushButton("🔄 Generate Default Tangents (T1, T2, T3)")
-        self.regenTangentsButton.setStyleSheet("background-color: #2196F3; color: white; font-weight: bold; padding: 10px;")
-        self.regenTangentsButton.setToolTip("Create T1, T2, T3 using default positions on the current plane")
+
+        self.regenTangentsButton = qt.QPushButton(
+            "🔄 Generate Default Tangents (T1, T2, T3)"
+        )
+        self.regenTangentsButton.setStyleSheet(
+            "background-color: #2196F3; color: white; font-weight: bold; padding: 10px;"
+        )
+        self.regenTangentsButton.setToolTip(
+            "Create T1, T2, T3 using default positions on the current plane"
+        )
         self.regenTangentsButton.clicked.connect(self.onRegenerateTangentsClicked)
         tangentLayout.addWidget(self.regenTangentsButton)
-        
-        self.tangentInstructionLabel = qt.QLabel("Click the button above to create tangent lines.")
-        self.tangentInstructionLabel.setStyleSheet("font-style: italic; color: #555555; padding: 5px;")
+
+        self.tangentInstructionLabel = qt.QLabel(
+            "Click the button above to create tangent lines."
+        )
+        self.tangentInstructionLabel.setStyleSheet(
+            "font-style: italic; color: #555555; padding: 5px;"
+        )
         self.tangentInstructionLabel.setWordWrap(True)
         self.tangentInstructionLabel.setAlignment(qt.Qt.AlignCenter)
         tangentLayout.addWidget(self.tangentInstructionLabel)
-        
+
         layout.addWidget(tangentGroup)
-        
-        # Project to Plane button (separate, for all tangents)
+
+        # Project to Plane button
         projectButton = qt.QPushButton("📐 Project All Tangents to Plane")
-        projectButton.setStyleSheet("background-color: #2196F3; color: white; font-weight: bold; padding: 8px;")
+        projectButton.setStyleSheet(
+            "background-color: #2196F3; color: white; font-weight: bold; padding: 8px;"
+        )
         projectButton.clicked.connect(self.projectAllTangentsToPlane)
         layout.addWidget(projectButton)
-        
+
         # T4 Section
-        self.t4Group = qt.QGroupBox("T4R and T4L Tangents (Nasal Floor Direction)")
+        self.t4Group = qt.QGroupBox(
+            "T4R and T4L Tangents (Nasal Floor Direction)"
+        )
         t4Layout = qt.QVBoxLayout(self.t4Group)
-        
-        # Instructions for T4 placement
+
         t4Instructions = qt.QLabel(
             "<b>Instructions for T4 tangents:</b><br>"
             "• <b>T4R</b> follows the nasal floor to the RIGHT of the anterior nasal spine<br>"
@@ -775,78 +837,104 @@ class GerasimowNosePredictor(qt.QWidget):
         t4Instructions.setTextFormat(qt.Qt.RichText)
         t4Instructions.setWordWrap(True)
         t4Layout.addWidget(t4Instructions)
-        
-        # Create empty line buttons (no auto-placement)
-        self.t4rButton = qt.QPushButton("📏 Create Empty T4R Line (Purple - Right nasal floor)")
-        self.t4rButton.setStyleSheet("background-color: #9966CC; color: white; font-weight: bold; padding: 10px;")
+
+        self.t4rButton = qt.QPushButton(
+            "📏 Create Empty T4R Line (Purple - Right nasal floor)"
+        )
+        self.t4rButton.setStyleSheet(
+            "background-color: #9966CC; color: white; font-weight: bold; padding: 10px;"
+        )
         self.t4rButton.clicked.connect(self.onCreateEmptyT4R)
         t4Layout.addWidget(self.t4rButton)
-        
-        self.t4lButton = qt.QPushButton("📏 Create Empty T4L Line (Purple - Left nasal floor)")
-        self.t4lButton.setStyleSheet("background-color: #AA88DD; color: white; font-weight: bold; padding: 10px;")
+
+        self.t4lButton = qt.QPushButton(
+            "📏 Create Empty T4L Line (Purple - Left nasal floor)"
+        )
+        self.t4lButton.setStyleSheet(
+            "background-color: #AA88DD; color: white; font-weight: bold; padding: 10px;"
+        )
         self.t4lButton.clicked.connect(self.onCreateEmptyT4L)
         t4Layout.addWidget(self.t4lButton)
-        
-        # Refresh button to check T4 status
+
         refreshButton = qt.QPushButton("🔄 Refresh T4 Status")
-        refreshButton.setStyleSheet("background-color: #607D8B; color: white; padding: 8px;")
+        refreshButton.setStyleSheet(
+            "background-color: #607D8B; color: white; padding: 8px;"
+        )
         refreshButton.clicked.connect(self.updateT4StatusFromExistingLines)
         t4Layout.addWidget(refreshButton)
-        
-        # Separator
+
         separator = qt.QFrame()
         separator.setFrameShape(qt.QFrame.HLine)
         separator.setFrameShadow(qt.QFrame.Sunken)
         t4Layout.addWidget(separator)
-        
-        # T4 Calculation Section
+
         calcLabel = qt.QLabel("<b>Calculate T4 from T4R and T4L:</b>")
-        calcLabel.setStyleSheet("font-weight: bold; margin-top: 5px; color: #FF9800;")
+        calcLabel.setStyleSheet(
+            "font-weight: bold; margin-top: 5px; color: #FF9800;"
+        )
         t4Layout.addWidget(calcLabel)
-        
+
         calcDesc = qt.QLabel(
-            "After placing both T4R and T4L (with at least 2 control points each), click below to calculate T4.\n"
+            "After placing both T4R and T4L (with at least 2 control points each), "
+            "click below to calculate T4.\n"
             "T4 represents the general nasal floor direction in the midplane."
         )
         calcDesc.setWordWrap(True)
         calcDesc.setStyleSheet("color: #555; font-style: italic;")
         t4Layout.addWidget(calcDesc)
-        
+
         self.calculateT4Button = qt.QPushButton("🔧 Calculate T4 from T4R/T4L")
-        self.calculateT4Button.setStyleSheet("background-color: #FF9800; color: white; font-weight: bold; padding: 10px;")
+        self.calculateT4Button.setStyleSheet(
+            "background-color: #FF9800; color: white; font-weight: bold; padding: 10px;"
+        )
         self.calculateT4Button.clicked.connect(self.onCalculateT4FromTangents)
         t4Layout.addWidget(self.calculateT4Button)
-        
-        # T4 status label
-        self.t4StatusLabel = qt.QLabel("T4 Status: Create T4R and T4L, then add control points (at least 2 each).")
+
+        self.t4StatusLabel = qt.QLabel(
+            "T4 Status: Create T4R and T4L, then add control points (at least 2 each)."
+        )
         self.t4StatusLabel.setWordWrap(True)
-        self.t4StatusLabel.setStyleSheet("padding: 5px; background-color: #f5f5f5; border-radius: 3px;")
+        self.t4StatusLabel.setSizePolicy(
+            qt.QSizePolicy.Preferred, qt.QSizePolicy.Maximum
+        )
+        self.t4StatusLabel.setStyleSheet(
+            "padding: 5px; background-color: #f5f5f5; border-radius: 3px;"
+        )
         t4Layout.addWidget(self.t4StatusLabel)
-        
+
         layout.addWidget(self.t4Group)
-        
+
         # Intersection Finding
         intersectionGroup = qt.QGroupBox("Find Intersections")
         intersectionLayout = qt.QVBoxLayout(intersectionGroup)
-        
+
         self.extendTangentsButton = qt.QPushButton("📏 Elongate Tangents if Needed")
-        self.extendTangentsButton.setStyleSheet("background-color: #66CCBB; color: white; padding: 8px;")
+        self.extendTangentsButton.setStyleSheet(
+            "background-color: #66CCBB; color: white; padding: 8px;"
+        )
         self.extendTangentsButton.clicked.connect(self.onExtendTangentsClicked)
         intersectionLayout.addWidget(self.extendTangentsButton)
-        
+
         self.findIntersectionsButton = qt.QPushButton("🎯 Find Intersections")
-        self.findIntersectionsButton.setStyleSheet("background-color: #99CC66; color: white; font-weight: bold; padding: 10px;")
+        self.findIntersectionsButton.setStyleSheet(
+            "background-color: #99CC66; color: white; font-weight: bold; padding: 10px;"
+        )
         self.findIntersectionsButton.clicked.connect(self.onFindIntersectionsClicked)
         intersectionLayout.addWidget(self.findIntersectionsButton)
-        
+
         layout.addWidget(intersectionGroup)
-        
+
         self.step5StatusLabel = qt.QLabel("Status: Ready to create tangent lines.")
         self.step5StatusLabel.setWordWrap(True)
-        self.step5StatusLabel.setStyleSheet("padding: 10px; background-color: #f0f0f0; border-radius: 5px;")
+        self.step5StatusLabel.setSizePolicy(
+            qt.QSizePolicy.Preferred, qt.QSizePolicy.Maximum
+        )
+        self.step5StatusLabel.setStyleSheet(
+            "padding: 10px; background-color: #f0f0f0; border-radius: 5px;"
+        )
         layout.addWidget(self.step5StatusLabel)
-        
-        
+
+        layout.addStretch(1)
 
         self.stepStack.addWidget(widget)
     
@@ -1044,12 +1132,13 @@ class GerasimowNosePredictor(qt.QWidget):
         """Step 6: R2 Point Selection and Confirmation"""
         widget = qt.QWidget()
         layout = qt.QVBoxLayout(widget)
+        layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(15)
-        
+
         title = qt.QLabel("Step 6: R2 Point Confirmation")
         title.setStyleSheet("font-weight: bold; font-size: 16px;")
         layout.addWidget(title)
-        
+
         adviceLabel = qt.QLabel(
             "<b>R2 Point Definition:</b><br>"
             "• <b>R2</b> is the point where the T4 tangent crosses the nasal soft tissue (midsagittal plane)<br>"
@@ -1059,52 +1148,63 @@ class GerasimowNosePredictor(qt.QWidget):
         adviceLabel.setTextFormat(qt.Qt.RichText)
         adviceLabel.setWordWrap(True)
         layout.addWidget(adviceLabel)
-        
-        # T4 Elongation button (to help see where T4 intersects soft tissue)
-        self.elongateT4Button = qt.QPushButton("📏 Elongate T4 Tangent (for better visualization)")
-        self.elongateT4Button.setStyleSheet("background-color: #66CCBB; color: white; font-weight: bold; padding: 10px;")
+
+        self.elongateT4Button = qt.QPushButton(
+            "📏 Elongate T4 Tangent (for better visualization)"
+        )
+        self.elongateT4Button.setStyleSheet(
+            "background-color: #66CCBB; color: white; font-weight: bold; padding: 10px;"
+        )
         self.elongateT4Button.clicked.connect(self.onElongateT4ForR2)
         layout.addWidget(self.elongateT4Button)
-        
-        # Separator
+
         separator = qt.QFrame()
         separator.setFrameShape(qt.QFrame.HLine)
         separator.setFrameShadow(qt.QFrame.Sunken)
         layout.addWidget(separator)
-        
-        # R2 Selection Section
+
         selectionGroup = qt.QGroupBox("R2 Point Selection")
         selectionLayout = qt.QVBoxLayout(selectionGroup)
-        
-        # Show current R2 status
+
         self.r2StatusLabel = qt.QLabel("R2 Status: Detecting...")
         self.r2StatusLabel.setWordWrap(True)
-        self.r2StatusLabel.setStyleSheet("padding: 10px; background-color: #f0f0f0; border-radius: 5px;")
+        self.r2StatusLabel.setSizePolicy(
+            qt.QSizePolicy.Preferred, qt.QSizePolicy.Maximum
+        )
+        self.r2StatusLabel.setStyleSheet(
+            "padding: 10px; background-color: #f0f0f0; border-radius: 5px;"
+        )
         selectionLayout.addWidget(self.r2StatusLabel)
-        
-        # Refresh button to check R2 status
+
         self.refreshR2Button = qt.QPushButton("🔄 Refresh R2 Status")
-        self.refreshR2Button.setStyleSheet("background-color: #607D8B; color: white; padding: 8px;")
+        self.refreshR2Button.setStyleSheet(
+            "background-color: #607D8B; color: white; padding: 8px;"
+        )
         self.refreshR2Button.clicked.connect(self.refreshR2Status)
         selectionLayout.addWidget(self.refreshR2Button)
-        
-        # Confirmation button
+
         self.confirmR2Button = qt.QPushButton("✓ Confirm R2 Placement")
-        self.confirmR2Button.setStyleSheet("background-color: #4CAF50; color: white; font-weight: bold; padding: 10px;")
+        self.confirmR2Button.setStyleSheet(
+            "background-color: #4CAF50; color: white; font-weight: bold; padding: 10px;"
+        )
         self.confirmR2Button.setEnabled(False)
         self.confirmR2Button.clicked.connect(self.onConfirmR2Placed)
         selectionLayout.addWidget(self.confirmR2Button)
-        
+
         layout.addWidget(selectionGroup)
-        
-        # Error comparison
-        self.calculateErrorsButton = qt.QPushButton("📊 Compare True vs. Predicted Points")
-        self.calculateErrorsButton.setStyleSheet("background-color: #f0ad4e; color: white; font-weight: bold; padding: 10px;")
+
+        self.calculateErrorsButton = qt.QPushButton(
+            "📊 Compare True vs. Predicted Points"
+        )
+        self.calculateErrorsButton.setStyleSheet(
+            "background-color: #f0ad4e; color: white; font-weight: bold; padding: 10px;"
+        )
         self.calculateErrorsButton.setEnabled(False)
         self.calculateErrorsButton.clicked.connect(self.onCalculateErrorsClicked)
         layout.addWidget(self.calculateErrorsButton)
-        
-        
+
+        layout.addStretch(1)
+
         self.stepStack.addWidget(widget)
     
     def onElongateT4ForR2(self):
@@ -1380,40 +1480,50 @@ class GerasimowNosePredictor(qt.QWidget):
         """Step 7: Results and Export"""
         widget = qt.QWidget()
         layout = qt.QVBoxLayout(widget)
+        layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(15)
-        
+
         title = qt.QLabel("Step 7: Results and Export")
         title.setStyleSheet("font-weight: bold; font-size: 16px;")
         layout.addWidget(title)
-        
+
         # Measurements Table
         measurementsLabel = qt.QLabel("<b>📏 Measurements (Distances and Angles)</b>")
         measurementsLabel.setStyleSheet("font-size: 14px;")
         layout.addWidget(measurementsLabel)
-        
+
         instructionsLabel = qt.QLabel(
-            "Prediction errors are <span style='background-color: #ffffcc;'>highlighted in yellow</span>."
+            "Prediction errors are "
+            "<span style='background-color: #ffffcc;'>highlighted in yellow</span>."
         )
         instructionsLabel.setWordWrap(True)
         layout.addWidget(instructionsLabel)
-        
+
         self.measurementsTable = qt.QTableWidget()
         self.measurementsTable.setColumnCount(3)
-        self.measurementsTable.setHorizontalHeaderLabels(["Measurement", "Value", "Unit"])
+        self.measurementsTable.setHorizontalHeaderLabels(
+            ["Measurement", "Value", "Unit"]
+        )
         self.measurementsTable.horizontalHeader().setStretchLastSection(False)
         try:
-            self.measurementsTable.horizontalHeader().setSectionResizeMode(0, qt.QHeaderView.Stretch)
-        except:
-            self.measurementsTable.horizontalHeader().setResizeMode(0, qt.QHeaderView.Stretch)
+            self.measurementsTable.horizontalHeader().setSectionResizeMode(
+                0, qt.QHeaderView.Stretch
+            )
+        except Exception:
+            self.measurementsTable.horizontalHeader().setResizeMode(
+                0, qt.QHeaderView.Stretch
+            )
         self.measurementsTable.setMinimumHeight(200)
         self.measurementsTable.setAlternatingRowColors(True)
         layout.addWidget(self.measurementsTable)
-        
+
         # Coordinates Table
-        coordinatesLabel = qt.QLabel("<b>📍 Coordinates Comparison (Predicted vs True)</b>")
+        coordinatesLabel = qt.QLabel(
+            "<b>📍 Coordinates Comparison (Predicted vs True)</b>"
+        )
         coordinatesLabel.setStyleSheet("font-size: 14px; margin-top: 10px;")
         layout.addWidget(coordinatesLabel)
-        
+
         self.coordinatesTable = qt.QTableWidget()
         self.coordinatesTable.setColumnCount(8)
         self.coordinatesTable.setHorizontalHeaderLabels([
@@ -1423,40 +1533,56 @@ class GerasimowNosePredictor(qt.QWidget):
             "3D Error (mm)"
         ])
         try:
-            self.coordinatesTable.horizontalHeader().setSectionResizeMode(0, qt.QHeaderView.Stretch)
-        except:
-            self.coordinatesTable.horizontalHeader().setResizeMode(0, qt.QHeaderView.Stretch)
+            self.coordinatesTable.horizontalHeader().setSectionResizeMode(
+                0, qt.QHeaderView.Stretch
+            )
+        except Exception:
+            self.coordinatesTable.horizontalHeader().setResizeMode(
+                0, qt.QHeaderView.Stretch
+            )
         self.coordinatesTable.setMinimumHeight(150)
         self.coordinatesTable.setAlternatingRowColors(True)
         layout.addWidget(self.coordinatesTable)
-        
+
         # Copy Buttons
         buttonLayout = qt.QHBoxLayout()
-        
+
         self.copyMeasurementsButton = qt.QPushButton("📋 Copy Measurements")
-        self.copyMeasurementsButton.setStyleSheet("background-color: #27ae60; color: white; padding: 8px; font-weight: bold;")
+        self.copyMeasurementsButton.setStyleSheet(
+            "background-color: #27ae60; color: white; padding: 8px; font-weight: bold;"
+        )
         self.copyMeasurementsButton.clicked.connect(self.onCopyMeasurements)
         buttonLayout.addWidget(self.copyMeasurementsButton)
-        
+
         self.copyCoordinatesButton = qt.QPushButton("📋 Copy Coordinates")
-        self.copyCoordinatesButton.setStyleSheet("background-color: #3498db; color: white; padding: 8px; font-weight: bold;")
+        self.copyCoordinatesButton.setStyleSheet(
+            "background-color: #3498db; color: white; padding: 8px; font-weight: bold;"
+        )
         self.copyCoordinatesButton.clicked.connect(self.onCopyCoordinates)
         buttonLayout.addWidget(self.copyCoordinatesButton)
-        
+
         layout.addLayout(buttonLayout)
-        
+
         # Finish button
         self.finishButton = qt.QPushButton("✓ Finish and Close")
-        self.finishButton.setStyleSheet("background-color: #4CAF50; color: white; font-weight: bold; padding: 12px;")
+        self.finishButton.setStyleSheet(
+            "background-color: #4CAF50; color: white; font-weight: bold; padding: 12px;"
+        )
         self.finishButton.clicked.connect(self.onFinish)
         layout.addWidget(self.finishButton)
-        
+
         self.step7StatusLabel = qt.QLabel("Status: Review your results above.")
         self.step7StatusLabel.setWordWrap(True)
-        self.step7StatusLabel.setStyleSheet("padding: 10px; background-color: #f0f0f0; border-radius: 5px;")
+        self.step7StatusLabel.setSizePolicy(
+            qt.QSizePolicy.Preferred, qt.QSizePolicy.Maximum
+        )
+        self.step7StatusLabel.setStyleSheet(
+            "padding: 10px; background-color: #f0f0f0; border-radius: 5px;"
+        )
         layout.addWidget(self.step7StatusLabel)
-        
-    
+
+        layout.addStretch(1)
+
         self.stepStack.addWidget(widget)
     
     # ========================================================================
