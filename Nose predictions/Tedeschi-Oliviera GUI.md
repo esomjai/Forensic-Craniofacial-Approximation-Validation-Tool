@@ -7,7 +7,9 @@ import urllib.request
 import tempfile
 
 RSTUDIO_EXPORT_URL = (
-    "https://raw.githubusercontent.com/esomjai/Forensic-Craniofacial-Approximation-Validation-Tool/refs/heads/basics/Start%20here%20/Export_tool.py"
+    "https://raw.githubusercontent.com/esomjai/"
+    "Forensic-Craniofacial-Approximation-Validation-Tool/"
+    "refs/heads/basics/Start%20here/RStudio_wrapper.py"
 )
 
 def _load_rstudio_wrapper(url=RSTUDIO_EXPORT_URL):
