@@ -2284,7 +2284,7 @@ class GerasimovNosePredictor(qt.QWidget):
 
             loadedNode = slicer.util.loadMarkups(tempFilePath)
             if loadedNode:
-                loadedNode.SetName("Gerasimow_landmarks")
+                loadedNode.SetName("Gerasimov_landmarks")
                 self.landmarksNode = loadedNode
                 self.step1StatusLabel.setText(
                     "Status: Successfully downloaded and loaded landmarks!"
@@ -2410,9 +2410,9 @@ def _unit(v):
 
 # Robust singleton instantiation: if the widget already exists, raise it;
 # otherwise create a fresh one.
-if hasattr(slicer, 'GerasimowNosePredictorWidget'):
+if hasattr(slicer, 'GerasimovNosePredictorWidget'):
     try:
-        w = slicer.GerasimowNosePredictorWidget
+        w = slicer.GerasimovNosePredictorWidget
         if w and not w.mainWidget.isHidden():
             w.mainWidget.raise_()
             w.mainWidget.activateWindow()
@@ -2420,8 +2420,8 @@ if hasattr(slicer, 'GerasimowNosePredictorWidget'):
         else:
             raise AttributeError
     except Exception:
-        slicer.GerasimowNosePredictorWidget = GerasimowNosePredictor()
+        slicer.GerasimovNosePredictorWidget = GerasimovNosePredictor()
 else:
-    slicer.GerasimowNosePredictorWidget = GerasimowNosePredictor()
+    slicer.GerasimovNosePredictorWidget = GerasimovNosePredictor()
 
 ```
