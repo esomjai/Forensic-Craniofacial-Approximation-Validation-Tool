@@ -1738,7 +1738,7 @@ class GerasimovNosePredictor(qt.QWidget):
             _rstudio_wrapper.install_export_button_for(
                 gui=self.mainWidget,
                 parent_layout=layout,
-                method="Gerasimow",
+                method="Gerasimov",
                 variant="auto",
                 table_widget=self.measurementsTable,
             )
@@ -2265,21 +2265,36 @@ class GerasimovNosePredictor(qt.QWidget):
         url = "https://github.com/user-attachments/files/28797197/Gerasimow_landmarks.mrk.json"
         self.step1StatusLabel.setText("Status: Downloading...")
         slicer.app.processEvents()
-        
+
         try:
-            with urllib.request.urlopen(url) as response:
+            # Use an explicit request with a User-Agent header — GitHub
+            # sometimes rejects plain urllib requests without one.
+            req = urllib.request.Request(
+                url,
+                headers={"User-Agent": "Mozilla/5.0 (3D Slicer script)"}
+            )
+            with urllib.request.urlopen(req, timeout=30) as response:
                 fileData = response.read()
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.mrk.json', mode='wb') as tempFile:
+
+            with tempfile.NamedTemporaryFile(
+                delete=False, suffix='.mrk.json', mode='wb'
+            ) as tempFile:
                 tempFile.write(fileData)
                 tempFilePath = tempFile.name
-            
+
             loadedNode = slicer.util.loadMarkups(tempFilePath)
             if loadedNode:
-                loadedNode.SetName("Gerasimov_landmarks")
+                loadedNode.SetName("Gerasimow_landmarks")
                 self.landmarksNode = loadedNode
-                self.step1StatusLabel.setText("Status: Successfully downloaded and loaded landmarks!")
+                self.step1StatusLabel.setText(
+                    "Status: Successfully downloaded and loaded landmarks!"
+                )
                 self.log("Downloaded landmarks from GitHub")
-            
+            else:
+                self.step1StatusLabel.setText(
+                    "Status: File downloaded but could not be loaded as markups."
+                )
+
             if os.path.exists(tempFilePath):
                 os.remove(tempFilePath)
         except Exception as e:
@@ -2390,39 +2405,23 @@ def _unit(v):
 
 
 # ========================================================================
-# SEQUENTIAL WORKFLOW SUPPORT
+# LAUNCH
 # ========================================================================
 
-# Store the original onFinish method
-original_onFinish = None
-sequential_mode = False
-next_callback = None
-
-def enable_sequential_mode(callback=None):
-    """Enable sequential workflow mode"""
-    global sequential_mode, next_callback, original_onFinish
-    sequential_mode = True
-    next_callback = callback
-    
-    # Modify the GUI to add completion button if not already there
-    if hasattr(gui, 'finishButton'):
-        gui.finishButton.setText("✓ Complete Gerasimov & Continue")
-        gui.finishButton.setStyleSheet("background-color: #4CAF50; color: white; font-weight: bold; padding: 12px;")
-        
-        # Store original onFinish and replace with sequential version
-        original_onFinish = gui.onFinish
-        
-        def sequential_finish():
-            print("Gerasimov completed, continuing to next tool...")
-            original_onFinish()
-            if next_callback:
-                next_callback()
-        
-        gui.onFinish = sequential_finish
-
-
-# Auto-run if script is executed directly
-if __name__ == "__main__":
-    gui = GerasimovNosePredictor()
+# Robust singleton instantiation: if the widget already exists, raise it;
+# otherwise create a fresh one.
+if hasattr(slicer, 'GerasimowNosePredictorWidget'):
+    try:
+        w = slicer.GerasimowNosePredictorWidget
+        if w and not w.mainWidget.isHidden():
+            w.mainWidget.raise_()
+            w.mainWidget.activateWindow()
+            w.mainWidget.show()
+        else:
+            raise AttributeError
+    except Exception:
+        slicer.GerasimowNosePredictorWidget = GerasimowNosePredictor()
+else:
+    slicer.GerasimowNosePredictorWidget = GerasimowNosePredictor()
 
 ```
