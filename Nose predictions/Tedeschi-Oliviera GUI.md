@@ -85,7 +85,7 @@ class TedeschiOlivieraGUI:
         # --- Shared Class Variables ---
         self.buttonWidth = 280
         self.landmarksNode = None
-        self.mspPlaneNode = None
+        self.referencePlaneNode = None # holds the INB or MSP plane node, whichever was selected
         self.predictedPronasaleNode = None
         self.asAngleNode = None
         self.arAngleNode = None
@@ -133,27 +133,25 @@ class TedeschiOlivieraGUI:
         mainLayout.addWidget(step1GroupBox)
         
         # ===== STEP 2: CREATE MSP =====
-        step2GroupBox = qt.QGroupBox("Step 2: Create Midsagittal Plane (MSP)")
+        step2GroupBox = qt.QGroupBox("Step 2: Create Midsagittal Plane (MSP or INB)")
         step2Layout = qt.QVBoxLayout(step2GroupBox)
         step2Layout.setContentsMargins(8, 10, 8, 10)
         step2Layout.setSpacing(8)
         
         step2Layout.addWidget(qt.QLabel("<b>Choose plane creation method:</b>"))
         self.planeMethodGroup = qt.QButtonGroup()
+        self.inbRadioButton = qt.QRadioButton("INB (3-point plane)")
+        self.inbRadioButton.setToolTip("Uses only inion, nasion, and bregma")
+        self.inbRadioButton.setChecked(True)
+        self.planeMethodGroup.addButton(self.inbRadioButton, 1)
+        
         self.mspRadioButton = qt.QRadioButton("MSP (3-point plane)")
         self.mspRadioButton.setToolTip("Uses only rhinion, prosthion, and nasion")
-        self.planeMethodGroup.addButton(self.mspRadioButton, 1)
-        step2Layout.addWidget(self.mspRadioButton)
-        
-        self.inbMspRadioButton = qt.QRadioButton("INB+MSP (5-point best-fit plane)")
-        self.inbMspRadioButton.setToolTip("Uses rhinion, prosthion, inion, nasion, and bregma")
-        self.inbMspRadioButton.setChecked(True)
-        self.planeMethodGroup.addButton(self.inbMspRadioButton, 2)
-        step2Layout.addWidget(self.inbMspRadioButton)
+        self.planeMethodGroup.addButton(self.mspRadioButton, 2)
         
         mspInfoLabel = qt.QLabel(
-            "<b>MSP (3-point):</b> Simple plane through rhinion, prosthion, and nasion<br>"
-            "<b>INB+MSP (5-point):</b> Best-fit plane through rhinion, prosthion, inion, nasion, and bregma"
+        "<b>INB (3-point):</b> Plane through inion, nasion, and bregma<br>"
+        "<b>MSP (3-point):</b> Plane through rhinion, prosthion, and nasion"
         )
         mspInfoLabel.setWordWrap(True)
         mspInfoLabel.setStyleSheet("font-size: 10px; color: #555; margin-top: 5px;")
@@ -173,7 +171,7 @@ class TedeschiOlivieraGUI:
         step3Layout.setSpacing(8)
         methodInfoLabel = qt.QLabel(
             "This calculates the predicted pronasale as the apex of a right triangle<br>"
-            "with rhinion and prosthion as the base, positioned on the MSP."
+            "with rhinion and prosthion as the base, positioned on the chosen reference plane."
         )
         methodInfoLabel.setWordWrap(True)
         step3Layout.addWidget(methodInfoLabel)
@@ -313,12 +311,12 @@ class TedeschiOlivieraGUI:
     def onResetClicked(self):
         """Clears all results, nodes created by the script, and resets the interface."""
         self.log("Resetting application state...")
-        nodes_to_remove = [self.mspPlaneNode, self.predictedPronasaleNode, self.asAngleNode, self.arAngleNode, self.errorLineNode]
+        nodes_to_remove = [self.referencePlaneNode, self.predictedPronasaleNode, self.asAngleNode, self.arAngleNode, self.errorLineNode]
         for node in nodes_to_remove:
             if node and slicer.mrmlScene.IsNodePresent(node):
                 slicer.mrmlScene.RemoveNode(node)
         
-        self.landmarksNode, self.mspPlaneNode, self.predictedPronasaleNode, self.asAngleNode, self.arAngleNode, self.errorLineNode = None, None, None, None, None, None
+        self.landmarksNode, self.referencePlaneNode, self.predictedPronasaleNode, self.asAngleNode, self.arAngleNode, self.errorLineNode = None, None, None, None, None, None
         self.results.clear()
         
         for row in range(self.resultsTable.rowCount()):
@@ -381,44 +379,58 @@ class TedeschiOlivieraGUI:
             self.log(f"ERROR: {e}")
     
     def onCreateMSPClicked(self):
-        """Creates the Midsagittal Plane based on the selected method."""
+        """Creates the reference plane (INB or MSP) based on the selected method."""
         try:
             self.landmarksNode = self.markupsSelector.currentNode()
             if not self.landmarksNode:
-                slicer.util.warningDisplay("Please load landmarks first."); return
-            if self.mspPlaneNode and slicer.mrmlScene.IsNodePresent(self.mspPlaneNode):
-                slicer.mrmlScene.RemoveNode(self.mspPlaneNode)
+                slicer.util.warningDisplay("Please load landmarks first.")
+                return
+            if self.referencePlaneNode and slicer.mrmlScene.IsNodePresent(self.referencePlaneNode):
+                slicer.mrmlScene.RemoveNode(self.referencePlaneNode)
 
             selectedMethod = self.planeMethodGroup.checkedId()
             if selectedMethod == 1:
-                self.log("Creating MSP using 3-point method..."); names = ["rhinion", "prosthion", "nasion"]
+                self.log("Creating INB using 3-point method...")
+                names = ["inion", "nasion", "bregma"]
+                plane_name = "INB"
             else:
-                self.log("Creating MSP using 5-point method..."); names = ["rhinion", "prosthion", "inion", "nasion", "bregma"]
-            indices = [self.findLandmarkByName(self.landmarksNode, name) for name in names]
-            if -1 in indices: raise ValueError(f"Required landmarks not found. Needed: {names}")
-            points = np.array([self.landmarksNode.GetNthControlPointPositionWorld(i) for i in indices])
-            origin = np.mean(points, axis=0)
-            if selectedMethod == 1: normal = np.cross(points[1] - points[0], points[2] - points[0])
-            else: _, _, Vt = np.linalg.svd(points - origin); normal = Vt[2, :]
-            self.mspPlaneNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsPlaneNode', 'MSP')
-            self.mspPlaneNode.SetCenter(origin)
-            self.mspPlaneNode.SetNormal(normal / np.linalg.norm(normal))
-            self.log("MSP plane created successfully.")
+                self.log("Creating MSP using 3-point method...")
+                names = ["rhinion", "prosthion", "nasion"]
+                plane_name = "MSP"
+
+            indices = [self.findLandmarkByName(self.landmarksNode, n) for n in names]
+            if -1 in indices:
+                raise ValueError(f"Required landmarks not found. Needed: {names}")
+            points = np.array([self.landmarksNode.GetNthControlPointPositionWorld(i)
+                            for i in indices])
+
+            # INB: origin at inion (= points[0]); MSP: origin at centroid
+            origin = points[0] if selectedMethod == 1 else np.mean(points, axis=0)
+
+            normal = np.cross(points[1] - points[0], points[2] - points[0])
+            normal = normal / np.linalg.norm(normal)
+
+            self.referencePlaneNode = slicer.mrmlScene.AddNewNodeByClass(
+                'vtkMRMLMarkupsPlaneNode', plane_name)
+            self.referencePlaneNode.SetCenter(origin)
+            self.referencePlaneNode.SetNormal(normal)
+            self.log(f"{plane_name} plane created successfully.")
         except Exception as e:
-            slicer.util.errorDisplay(f"Error creating MSP: {e}"); self.log(f"ERROR: {e}")
+            slicer.util.errorDisplay(f"Error creating plane: {e}")
+            self.log(f"ERROR: {e}")
     
     def onPredictPronasaleClicked(self):
         """Predicts the pronasale position based on the MSP."""
         try:
-            if not self.landmarksNode or not self.mspPlaneNode:
-                slicer.util.warningDisplay("Please load landmarks and create MSP first."); return
+            if not self.landmarksNode or not self.referencePlaneNode:
+                slicer.util.warningDisplay("Please load landmarks and create the reference plane first."); return
             if self.predictedPronasaleNode and slicer.mrmlScene.IsNodePresent(self.predictedPronasaleNode):
                 slicer.mrmlScene.RemoveNode(self.predictedPronasaleNode)
             self.log("Calculating predicted pronasale...")
             rh_idx, pr_idx = self.findLandmarkByName(self.landmarksNode, "rhinion"), self.findLandmarkByName(self.landmarksNode, "prosthion")
             if -1 in [rh_idx, pr_idx]: raise ValueError("Rhinion or Prosthion not found.")
             A, B = np.array(self.landmarksNode.GetNthControlPointPositionWorld(rh_idx)), np.array(self.landmarksNode.GetNthControlPointPositionWorld(pr_idx))
-            plane_normal = np.zeros(3); self.mspPlaneNode.GetNormalWorld(plane_normal)
+            plane_normal = np.zeros(3); self.referencePlaneNode.GetNormalWorld(plane_normal)
             perp_dir = np.cross(plane_normal, (B - A) / np.linalg.norm(B - A))
             midpoint, radius = (A + B) / 2, np.linalg.norm(B - A) / 2
             C1, C2 = midpoint + perp_dir * radius, midpoint - perp_dir * radius
