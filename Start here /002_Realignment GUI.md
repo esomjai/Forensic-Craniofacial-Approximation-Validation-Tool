@@ -386,7 +386,7 @@ def move_nasion_to_origin():
 
     scene = slicer.mrmlScene
 
-    # ---- 1. Find nasion landmark ----
+    # ---- 1. Find nasion landmark -------------------------------------------
     nasion_node = None
     nasion_idx = -1
     fiducial_nodes = []
@@ -411,13 +411,12 @@ def move_nasion_to_origin():
         )
         return
 
-    # ---- 2. Get current world position of nasion ----
+    # ---- 2. Get current world position of nasion ---------------------------
     nasion_pos = [0.0, 0.0, 0.0]
     nasion_node.GetNthControlPointPositionWorld(nasion_idx, nasion_pos)
     translation = [-nasion_pos[0], -nasion_pos[1], -nasion_pos[2]]
     print(f"Moving nasion from {nasion_pos} to (0,0,0) with translation {translation}")
 
-    # Early exit if already at origin
     if all(abs(x) < 1e-6 for x in translation):
         slicer.util.infoDisplay("Nasion already at origin. No translation needed.")
         return
@@ -425,8 +424,7 @@ def move_nasion_to_origin():
     def trans(p):
         return [p[0] + translation[0], p[1] + translation[1], p[2] + translation[2]]
 
-    # ---- 3 & 4. Volumes and models (harden transform) ----
-    # Build ONE temp transform node and reuse it for all volumes and models.
+    # ---- 3. Prepare a single temporary transform node ----------------------
     vtk_transform = vtk.vtkTransform()
     vtk_transform.Translate(translation)
     transform_node = scene.AddNewNodeByClass(
@@ -434,75 +432,73 @@ def move_nasion_to_origin():
     )
     transform_node.SetMatrixTransformToParent(vtk_transform.GetMatrix())
 
-    def bake(node):
-        # Bake any existing transform into the data first, so we don't
-        # double-apply it when we stack the translation on top.
-        if node.GetTransformNodeID():
+    try:
+        # ---- 4. Harden volumes (all volume types, not just scalar) ---------
+        def bake(node):
+            # Bake any pre‑existing transform first, then stack the translation.
+            if node.GetTransformNodeID():
+                slicer.vtkSlicerTransformLogic().hardenTransform(node)
+            node.SetAndObserveTransformNodeID(transform_node.GetID())
             slicer.vtkSlicerTransformLogic().hardenTransform(node)
-        # Apply translation and bake it in.
-        node.SetAndObserveTransformNodeID(transform_node.GetID())
-        slicer.vtkSlicerTransformLogic().hardenTransform(node)
 
-    vol_collection = scene.GetNodesByClass("vtkMRMLScalarVolumeNode")
-    for i in range(vol_collection.GetNumberOfItems()):
-        bake(vol_collection.GetItemAsObject(i))
+        vol_collection = scene.GetNodesByClass("vtkMRMLVolumeNode")
+        for i in range(vol_collection.GetNumberOfItems()):
+            bake(vol_collection.GetItemAsObject(i))
 
-    model_collection = scene.GetNodesByClass("vtkMRMLModelNode")
-    for i in range(model_collection.GetNumberOfItems()):
-        bake(model_collection.GetItemAsObject(i))
+        # ---- 5. Harden models ---------------------------------------------
+        model_collection = scene.GetNodesByClass("vtkMRMLModelNode")
+        for i in range(model_collection.GetNumberOfItems()):
+            bake(model_collection.GetItemAsObject(i))
 
-    scene.RemoveNode(transform_node)
+    finally:
+        # Always clean up, even if a harden operation raised.
+        scene.RemoveNode(transform_node)
 
-    # ---- 5. Markup nodes ----
+    # ---- 6. Markup nodes: translate every control point, batched ----------
     def translate_markup(node):
-        # Collect the new world positions FIRST (with the node's current
-        # transform still active, so world coords are meaningful).
+        # 1) Collect new world positions while the current transform is still active.
         new_positions = []
         for j in range(node.GetNumberOfControlPoints()):
             pos = [0.0, 0.0, 0.0]
             node.GetNthControlPointPositionWorld(j, pos)
             new_positions.append(trans(pos))
-        # Remove transform BEFORE writing the new positions: with no
-        # transform, world == local, so Set...PositionWorld stores
-        # exactly the coordinates we computed.
+
+        # 2) Remove the parent transform *before* writing world positions.
+        #    With no transform, world == local, so Set...PositionWorld
+        #    writes exactly the coordinates we computed.
         node.SetAndObserveTransformNodeID(None)
-        node.StartModify()
+
+        # 3) Batch the writes to avoid one UI rebuild per point.
+        was_modified = node.StartModify()
         try:
             for j, new_pos in enumerate(new_positions):
                 node.SetNthControlPointPositionWorld(j, new_pos)
         finally:
-            node.EndModify()
+            node.EndModify(was_modified)
 
+    # Fiducials (includes the nasion node itself)
     for node in fiducial_nodes:
         translate_markup(node)
 
+    # All other markup types – planes are *included* because they are
+    # defined by three control points and must be translated rigidly.
     other_markups_classes = [
         "vtkMRMLMarkupsLineNode",
         "vtkMRMLMarkupsCurveNode",
         "vtkMRMLMarkupsClosedCurveNode",
         "vtkMRMLMarkupsAngleNode",
         "vtkMRMLMarkupsROINode",
+        "vtkMRMLMarkupsPlaneNode",   # <-- fixed: treat as normal markup
     ]
     for cls in other_markups_classes:
         coll = scene.GetNodesByClass(cls)
         for i in range(coll.GetNumberOfItems()):
             translate_markup(coll.GetItemAsObject(i))
 
-    # Planes: translate origin only. GetOrigin returns world coords, so
-    # clear the transform first and then set the new (world) origin.
-    plane_coll = scene.GetNodesByClass("vtkMRMLMarkupsPlaneNode")
-    for i in range(plane_coll.GetNumberOfItems()):
-        plane = plane_coll.GetItemAsObject(i)
-        origin = [0.0, 0.0, 0.0]
-        plane.GetOrigin(origin)
-        new_origin = trans(origin)
-        plane.SetAndObserveTransformNodeID(None)
-        plane.SetOrigin(new_origin)
-
-    # ---- 6. Ensure nasion is exactly at origin (safety net) ----
+    # ---- 7. Safety net: nasion exactly at origin ---------------------------
     nasion_node.SetNthControlPointPositionWorld(nasion_idx, [0.0, 0.0, 0.0])
 
-    # ---- 7. Single consolidated dialog: success + restart instructions ----
+    # ---- 8. Single consolidated dialog ------------------------------------
     msg = qt.QMessageBox()
     msg.setWindowTitle("Nasion Moved to Origin")
     msg.setText(
