@@ -436,8 +436,8 @@ def move_nasion_to_origin():
 
     def bake(node):
         # Bake any existing transform into the data first, so we don't
-        # double-apply it when we restore / stack transforms.
-        if node.GetTransformNode():
+        # double-apply it when we stack the translation on top.
+        if node.GetTransformNodeID():
             slicer.vtkSlicerTransformLogic().hardenTransform(node)
         # Apply translation and bake it in.
         node.SetAndObserveTransformNodeID(transform_node.GetID())
