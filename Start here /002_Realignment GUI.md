@@ -382,6 +382,7 @@ def move_nasion_to_origin():
     """
     import slicer
     import vtk
+    import qt
 
     scene = slicer.mrmlScene
 
@@ -404,7 +405,10 @@ def move_nasion_to_origin():
             break
 
     if nasion_node is None:
-        slicer.util.errorDisplay("Nasion landmark not found.\nPlease create a fiducial point named 'nasion' or 'n' in any markup list.")
+        slicer.util.errorDisplay(
+            "Nasion landmark not found.\n"
+            "Please create a fiducial point named 'nasion' or 'n' in any markup list."
+        )
         return
 
     # ---- 2. Get current world position of nasion ----
@@ -418,110 +422,92 @@ def move_nasion_to_origin():
         slicer.util.infoDisplay("Nasion already at origin. No translation needed.")
         return
 
-    # ---- Helper: apply translation to a point ----
     def trans(p):
         return [p[0] + translation[0], p[1] + translation[1], p[2] + translation[2]]
 
-    # ---- 3. Process volumes (using harden transform) ----
-    volume_nodes = []
+    # ---- 3 & 4. Volumes and models (harden transform) ----
+    # Build ONE temp transform node and reuse it for all volumes and models.
+    vtk_transform = vtk.vtkTransform()
+    vtk_transform.Translate(translation)
+    transform_node = scene.AddNewNodeByClass(
+        "vtkMRMLLinearTransformNode", "temp_nasion_translation"
+    )
+    transform_node.SetMatrixTransformToParent(vtk_transform.GetMatrix())
+
+    def bake(node):
+        # Bake any existing transform into the data first, so we don't
+        # double-apply it when we restore / stack transforms.
+        if node.GetTransformNode():
+            slicer.vtkSlicerTransformLogic().hardenTransform(node)
+        # Apply translation and bake it in.
+        node.SetAndObserveTransformNodeID(transform_node.GetID())
+        slicer.vtkSlicerTransformLogic().hardenTransform(node)
+
     vol_collection = scene.GetNodesByClass("vtkMRMLScalarVolumeNode")
     for i in range(vol_collection.GetNumberOfItems()):
-        volume_nodes.append(vol_collection.GetItemAsObject(i))
+        bake(vol_collection.GetItemAsObject(i))
 
-    if volume_nodes:
-        vtk_transform = vtk.vtkTransform()
-        vtk_transform.Translate(translation)
-        transform_node = scene.AddNewNodeByClass("vtkMRMLLinearTransformNode", "temp_nasion_translation")
-        transform_node.SetMatrixTransformToParent(vtk_transform.GetMatrix())
-
-        for vol in volume_nodes:
-            original_transform = vol.GetTransformNodeID()
-            vol.SetAndObserveTransformNodeID(transform_node.GetID())
-            slicer.app.processEvents()
-            slicer.vtkSlicerTransformLogic().hardenTransform(vol)
-            if original_transform:
-                vol.SetAndObserveTransformNodeID(original_transform)
-
-        scene.RemoveNode(transform_node)
-
-    # ---- 4. Process models ----
-    model_nodes = []
     model_collection = scene.GetNodesByClass("vtkMRMLModelNode")
     for i in range(model_collection.GetNumberOfItems()):
-        model_nodes.append(model_collection.GetItemAsObject(i))
+        bake(model_collection.GetItemAsObject(i))
 
-    if model_nodes:
-        vtk_transform = vtk.vtkTransform()
-        vtk_transform.Translate(translation)
-        transform_node = scene.AddNewNodeByClass("vtkMRMLLinearTransformNode", "temp_nasion_translation")
-        transform_node.SetMatrixTransformToParent(vtk_transform.GetMatrix())
+    scene.RemoveNode(transform_node)
 
-        for model in model_nodes:
-            original_transform = model.GetTransformNodeID()
-            model.SetAndObserveTransformNodeID(transform_node.GetID())
-            slicer.app.processEvents()
-            slicer.vtkSlicerTransformLogic().hardenTransform(model)
-            if original_transform:
-                model.SetAndObserveTransformNodeID(original_transform)
-
-        scene.RemoveNode(transform_node)
-
-    # ---- 5. Markup nodes: translate control points directly ----
-    for node in fiducial_nodes:
-        positions = []
-        n_points = node.GetNumberOfControlPoints()
-        for j in range(n_points):
+    # ---- 5. Markup nodes ----
+    def translate_markup(node):
+        # Collect the new world positions FIRST (with the node's current
+        # transform still active, so world coords are meaningful).
+        new_positions = []
+        for j in range(node.GetNumberOfControlPoints()):
             pos = [0.0, 0.0, 0.0]
             node.GetNthControlPointPositionWorld(j, pos)
-            positions.append(trans(pos))
-
-        for j, new_pos in enumerate(positions):
-            node.SetNthControlPointPositionWorld(j, new_pos)
-
+            new_positions.append(trans(pos))
+        # Remove transform BEFORE writing the new positions: with no
+        # transform, world == local, so Set...PositionWorld stores
+        # exactly the coordinates we computed.
         node.SetAndObserveTransformNodeID(None)
-
-    # Lines, curves, angles, ROIs
-    other_markups_classes = ["vtkMRMLMarkupsLineNode", "vtkMRMLMarkupsCurveNode",
-                             "vtkMRMLMarkupsClosedCurveNode", "vtkMRMLMarkupsAngleNode",
-                             "vtkMRMLMarkupsROINode"]
-    for cls in other_markups_classes:
-        nodes_list = []
-        collection = scene.GetNodesByClass(cls)
-        for i in range(collection.GetNumberOfItems()):
-            nodes_list.append(collection.GetItemAsObject(i))
-        for node in nodes_list:
-            positions = []
-            n_points = node.GetNumberOfControlPoints()
-            for j in range(n_points):
-                pos = [0.0, 0.0, 0.0]
-                node.GetNthControlPointPositionWorld(j, pos)
-                positions.append(trans(pos))
-            for j, new_pos in enumerate(positions):
+        node.StartModify()
+        try:
+            for j, new_pos in enumerate(new_positions):
                 node.SetNthControlPointPositionWorld(j, new_pos)
-            node.SetAndObserveTransformNodeID(None)
+        finally:
+            node.EndModify()
 
-    # Planes: translate origin only
-    plane_nodes = []
-    plane_collection = scene.GetNodesByClass("vtkMRMLMarkupsPlaneNode")
-    for i in range(plane_collection.GetNumberOfItems()):
-        plane_nodes.append(plane_collection.GetItemAsObject(i))
-    for plane in plane_nodes:
+    for node in fiducial_nodes:
+        translate_markup(node)
+
+    other_markups_classes = [
+        "vtkMRMLMarkupsLineNode",
+        "vtkMRMLMarkupsCurveNode",
+        "vtkMRMLMarkupsClosedCurveNode",
+        "vtkMRMLMarkupsAngleNode",
+        "vtkMRMLMarkupsROINode",
+    ]
+    for cls in other_markups_classes:
+        coll = scene.GetNodesByClass(cls)
+        for i in range(coll.GetNumberOfItems()):
+            translate_markup(coll.GetItemAsObject(i))
+
+    # Planes: translate origin only. GetOrigin returns world coords, so
+    # clear the transform first and then set the new (world) origin.
+    plane_coll = scene.GetNodesByClass("vtkMRMLMarkupsPlaneNode")
+    for i in range(plane_coll.GetNumberOfItems()):
+        plane = plane_coll.GetItemAsObject(i)
         origin = [0.0, 0.0, 0.0]
         plane.GetOrigin(origin)
-        plane.SetOrigin(trans(origin))
+        new_origin = trans(origin)
         plane.SetAndObserveTransformNodeID(None)
+        plane.SetOrigin(new_origin)
 
-    # ---- 6. Ensure nasion is exactly at origin ----
+    # ---- 6. Ensure nasion is exactly at origin (safety net) ----
     nasion_node.SetNthControlPointPositionWorld(nasion_idx, [0.0, 0.0, 0.0])
 
-    slicer.app.processEvents()
-    slicer.util.infoDisplay(f"Nasion moved to origin.\nTranslation applied: {translation[0]:.2f}, {translation[1]:.2f}, {translation[2]:.2f} mm")
-
-    # ---- 7. Instruct user to manually save and restart ----
+    # ---- 7. Single consolidated dialog: success + restart instructions ----
     msg = qt.QMessageBox()
-    msg.setWindowTitle("Action Required")
+    msg.setWindowTitle("Nasion Moved to Origin")
     msg.setText(
-        "Nasion successfully moved to origin.\n\n"
+        "Nasion successfully moved to origin.\n"
+        f"Translation applied: {translation[0]:.2f}, {translation[1]:.2f}, {translation[2]:.2f} mm\n\n"
         "To avoid freezing when using the Markups module later, you must now:\n\n"
         "1. Save your scene (File → Save or Ctrl+S)\n"
         "2. Close Slicer completely\n"
@@ -532,6 +518,7 @@ def move_nasion_to_origin():
     msg.setIcon(qt.QMessageBox.Information)
     msg.exec_()
     print("User instructed to save scene and restart Slicer.")
+
 
 # Run the function
 move_nasion_to_origin()
