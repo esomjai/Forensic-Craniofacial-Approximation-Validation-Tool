@@ -1,4 +1,3 @@
-
 # ==================================================================
 # RStudio_wrapper.py — Per-session export with scene metadata
 # ------------------------------------------------------------------
@@ -25,8 +24,11 @@
 #   # GUI STATE (optional, per-GUI)
 #   # NOTES
 #   # BEGIN_DATA
-#   point_list,landmark,definition,R_A_S_X,R_A_S_Y,R_A_S_Z
-#   ...
+#   point_list,landmark,definition,role,R_A_S_X,R_A_S_Y,R_A_S_Z
+#
+# role is "true" | "pred" | "reference" | "hard_tissue" | "error" | "unknown"
+# and is derived by _classify_role() from node name and landmark labels.
+# Older CSVs (without the role column) are still readable by the R side.
 # ==================================================================
 
 import os, csv, re, datetime
@@ -114,6 +116,80 @@ DICOM_NESTED_MAP = {
     "scan_SpiralPitchFactor":          "SpiralPitchFactor",
     "scan_ExposureTime_ms":            "ExposureTime",
 }
+
+# Markup node classes collected from the scene. Only fiducial nodes
+# carry meaningful per-point labels, so non-fiducial classes are
+# deliberately NOT exported (they'd produce rows with empty labels).
+MARKUP_CLASSES = [
+    "vtkMRMLMarkupsFiducialNode",
+]
+
+
+def _classify_role(node_name, landmark_labels=None):
+    """Classify a markup node's role for validation analysis.
+
+    Returns one of: "true", "pred", "reference", "hard_tissue",
+                    "error", "unknown".
+
+    Roles other than "true"/"pred" are excluded from the error tables
+    downstream. Keep this in sync with the R-side fallback in
+    validation_wrapper.R's `source = case_when(...)` block.
+    """
+    n = (node_name or "").lower()
+
+    # ---- REFERENCE / HARD TISSUE / ERROR (excluded) ----
+    if any(p in n for p in ("fhp", "frankfort", "reference", "npp", "ptp")):
+        return "reference"
+    if n.startswith("plane_") or n.endswith("_plane") or n in ("msp", "inb"):
+        return "reference"
+    if n in ("f", "nab point", "point x", "x_axis", "y_axis", "z_axis",
+             "line_1", "line_2", "line_3", "subspinale-prosthion"):
+        return "reference"
+    if "hard_tissue" in n or "hardtissue" in n:
+        return "hard_tissue"
+    if n.startswith("bone"):
+        return "hard_tissue"
+    if n.startswith(("error_", "adv_error_", "pred error", "stephan_error")):
+        return "error"
+    if any(p in n for p in ("nasal_angle", "incisor_width",
+                             "intercanine_width", "maw", "mnw",
+                             "vmj-aca", "nasal spine vector", "fstt mp",
+                             "pronasale_vector", "prediction_error",
+                             "nd_circle", "nh_circle", "nl_circle")):
+        return "reference"
+    if n.startswith(("pa_", "pv_", "pfhp_",
+                     "mirrora_", "mirrorb_", "nasal outline", "nasalbonetob")):
+        return "reference"
+    if n.startswith("nasal_bone_outline"):
+        return "reference"
+    if n.startswith("krogmaniscan_hard"):
+        return "hard_tissue"
+
+    # ---- PREDICTIONS (exact node names first) ----
+    if n.startswith("predicted_soft_tissue"):                  return "pred"  # Ryu
+    if n.startswith("soft_tissue_pred_"):                      return "pred"  # Rynn
+    if n.startswith("pred_"):                                  return "pred"  # Ridel
+    if n == "lmrk_predictions":                                return "pred"  # Purkait
+    if n.startswith("pronasale_stephan"):                      return "pred"  # Stephan
+    if n.startswith(("predicted_pronasale", "predicted_pro")): return "pred"  # Tedeschi
+    if n == "predicted pronasale":                             return "pred"  # Threefold
+    if n.startswith("stephan_pronasale"):                      return "pred"  # Prokopec
+
+    # ---- TRUE (ground truth, exact node names) ----
+    if n.startswith("lmrks_stephan"):                          return "true"  # Stephan
+    if n.endswith("_lmrks"):                                   return "true"  # Tedeschi
+    if n == "krogmaniscan_soft_tissue":                        return "true"  # Threefold
+    if n.startswith("ryu_soft_tissue"):                        return "true"  # Ryu
+    if n.startswith("rynn_soft_tissue"):                       return "true"  # Rynn
+    if n == "ridel_soft_tissue":                               return "true"  # Ridel
+    if n == "ps_soft_tissue":                                  return "true"  # Purkait
+    if n.startswith("nose_profile_outline"):                   return "true"  # Prokopec
+
+    # ---- Generic fallbacks (Gerasimow, Thitiorul, future methods) ----
+    if n.startswith("true"):                                   return "true"
+    if n.startswith(("pred", "predicted")):                    return "pred"
+
+    return "unknown"
 
 
 # ==================================================================
@@ -775,25 +851,46 @@ class RStudioExporter(object):
     # ==========================================================
     def _collect_landmarks(self):
         rows = []
-        try:
-            nodes = slicer.util.getNodesByClass(
-                "vtkMRMLMarkupsFiducialNode")
-        except Exception:
-            nodes = []
-        for node in nodes:
-            node_name = node.GetName()
-            for i in range(node.GetNumberOfControlPoints()):
-                label = node.GetNthControlPointLabel(i) or ""
+        all_nodes = []
+        for class_name in MARKUP_CLASSES:
+            try:
+                all_nodes.extend(slicer.util.getNodesByClass(class_name))
+            except Exception:
+                pass
+
+        for node in all_nodes:
+            try:
+                node_name = node.GetName()
+                n_points  = node.GetNumberOfControlPoints()
+            except Exception:
+                continue
+            if n_points == 0:
+                continue
+
+            labels = []
+            for i in range(n_points):
+                try:
+                    labels.append(node.GetNthControlPointLabel(i) or "")
+                except Exception:
+                    labels.append("")
+
+            node_role = _classify_role(node_name, labels)
+
+            for i in range(n_points):
+                p = [0.0, 0.0, 0.0]
+                try:
+                    node.GetNthControlPointPositionWorld(i, p)
+                except Exception:
+                    continue
                 try:
                     description = node.GetNthControlPointDescription(i) or ""
                 except Exception:
                     description = ""
-                p = [0.0, 0.0, 0.0]
-                node.GetNthControlPointPositionWorld(i, p)
                 rows.append({
                     "point_list": node_name,
-                    "landmark": label,
+                    "landmark":   labels[i],
                     "definition": description,
+                    "role":       node_role,
                     "R": p[0], "A": p[1], "S": p[2],
                 })
         return rows
@@ -933,13 +1030,12 @@ class RStudioExporter(object):
             for k, v in meta_rows:
                 w.writerow([k, v])
             w.writerow(["# BEGIN_DATA", ""])
-            w.writerow(["point_list", "landmark", "definition",
+            w.writerow(["point_list", "landmark", "definition", "role",
                         "R_A_S_X", "R_A_S_Y", "R_A_S_Z"])
             for r in self._collect_landmarks():
-                w.writerow([r["point_list"], r["landmark"],
-                            r["definition"],
-                            f"{r['R']:.4f}", f"{r['A']:.4f}",
-                            f"{r['S']:.4f}"])
+                w.writerow([r["point_list"], r["landmark"], r["definition"],
+                            r["role"],
+                            f"{r['R']:.4f}", f"{r['A']:.4f}", f"{r['S']:.4f}"])
         return path
 
 
