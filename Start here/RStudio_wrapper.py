@@ -4,12 +4,12 @@
 # One file per export:
 #   YYYYMMDD_HHMMSS_<method>_<subject_id>_<region>.csv
 #
-# Three prompts per click:
-#   1. Subject ID + code version
+# Two prompts per click:
+#   1. Subject ID
 #   2. DICOM source folder (optional — first time prompts for archive
 #      root, remembers it, then tries to auto-locate <root>/<ID>/)
-#   3. Session dialog (region, plane, patient/scan info,
-#      auto-filled metadata, extras, notes)
+#   Then a session dialog (region, plane, patient/scan info,
+#   auto-filled metadata, extras, notes)
 #
 # File layout:
 #   key,value
@@ -171,6 +171,7 @@ def _classify_role(node_name, landmark_labels=None):
     if n.startswith("pred_"):                                  return "pred"  # Ridel
     if n == "lmrk_predictions":                                return "pred"  # Purkait
     if n.startswith("pronasale_stephan"):                      return "pred"  # Stephan
+    if n == "pronasale pred":                                  return "pred"  # Stephan (older)
     if n.startswith(("predicted_pronasale", "predicted_pro")): return "pred"  # Tedeschi
     if n == "predicted pronasale":                             return "pred"  # Threefold
     if n.startswith("stephan_pronasale"):                      return "pred"  # Prokopec
@@ -209,7 +210,6 @@ class RStudioExporter(object):
         except Exception:
             pass
         self._subject_id = None
-        self._code_version = None
 
     # ----------------------------------------------------------
     #  Folder
@@ -234,9 +234,10 @@ class RStudioExporter(object):
     # ----------------------------------------------------------
     def prompt_all(self, parent, method, scene_auto_plane):
         """
-        Runs the three prompts. Returns a session dict, or None.
+        Runs the two prompts plus the session dialog.
+        Returns a session dict, or None.
         """
-        sid, version = self._prompt_identity(parent)
+        sid = self._prompt_identity(parent)
         if not sid:
             return None
 
@@ -246,7 +247,6 @@ class RStudioExporter(object):
         #   {"status": "matched", "folder": ..., "data": {...}}
         #   {"status": "anonymised", "folder": ..., "data": {...}}
         #   None                                        — user cancelled
-
         if dicom_info is None:
             return None
 
@@ -256,32 +256,31 @@ class RStudioExporter(object):
         if session is None:
             return None
 
-        session["subject_id"] = sid
-        session["code_version"] = version
-        session["method"] = method
-        session["dicom_folder"] = dicom_info.get("folder", "")
-        session["dicom_patient_id"] = dicom_info.get("dicom_patient_id", "")
+        session["subject_id"]         = sid
+        session["method"]             = method
+        session["dicom_folder"]       = dicom_info.get("folder", "")
+        session["dicom_patient_id"]   = dicom_info.get("dicom_patient_id", "")
         session["dicom_match_status"] = dicom_info.get("status", "skipped")
         return session
 
     # ==========================================================
-    #  Prompt 1 — identity
+    #  Prompt 1 — identity (Subject ID only)
     # ==========================================================
     def _prompt_identity(self, parent):
-        if self._subject_id and self._code_version:
-            return self._subject_id, self._code_version
+        if self._subject_id:
+            return self._subject_id
         if not qt:
-            return None, None
+            return None
 
         from qt import (QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
                         QLabel, QLineEdit, QPixmap, Qt, QPushButton)
 
         dialog = QDialog(parent)
-        dialog.setWindowTitle("Subject ID and Code Version")
+        dialog.setWindowTitle("Subject ID")
         dialog.setWindowFlags(
             dialog.windowFlags() | qt.Qt.WindowStaysOnTopHint)
-        dialog.setMinimumSize(520, 320)
-        dialog.resize(520, 360)
+        dialog.setMinimumSize(520, 280)
+        dialog.resize(520, 320)
 
         layout = QVBoxLayout(dialog)
         layout.setSpacing(10)
@@ -315,12 +314,6 @@ class RStudioExporter(object):
         if self._subject_id:
             sid_edit.setText(self._subject_id)
         form.addRow("Subject ID:", sid_edit)
-
-        version_edit = QLineEdit()
-        version_edit.setPlaceholderText("Enter code version")
-        if self._code_version:
-            version_edit.setText(self._code_version)
-        form.addRow("Code version:", version_edit)
         layout.addLayout(form)
 
         row = QHBoxLayout()
@@ -343,15 +336,13 @@ class RStudioExporter(object):
         dialog.exec_()
 
         if not accepted["v"]:
-            return None, None
+            return None
         sid = sid_edit.text.strip()
-        version = version_edit.text.strip()
         if not sid:
             slicer.util.warningDisplay("Subject ID is required.")
-            return None, None
+            return None
         self._subject_id = sid
-        self._code_version = version or "unspecified"
-        return self._subject_id, self._code_version
+        return self._subject_id
 
     # ==========================================================
     #  Prompt 2 — DICOM source folder
@@ -927,7 +918,6 @@ class RStudioExporter(object):
         meta_rows.append(("variant", session.get("variant", "")))
         meta_rows.append(("region", session.get("region", "")))
         meta_rows.append(("plane_method", session.get("plane_method", "")))
-        meta_rows.append(("code_version", session.get("code_version", "")))
         meta_rows.append(("subject_id", subject_id))
         meta_rows.append(("dicom_folder", session.get("dicom_folder", "")))
         meta_rows.append(("dicom_patient_id", session.get("dicom_patient_id", "")))
