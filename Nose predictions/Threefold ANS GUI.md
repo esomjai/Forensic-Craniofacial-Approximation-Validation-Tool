@@ -342,7 +342,7 @@ class ThreefoldANSGUI(qt.QDialog):
             "<b>3. Source Volume</b> should be the name of your DICOM file.<br><br>"
             "<b>4. Click the plus sign [+] 'Add'.</b><br><br>"
             "<b>5. Choose the Threshold tool</b> from the panel below (in the right column, first row).<br><br>"
-            "<b>6. Edit the Threshold Range:</b> The minimum is usually 500. (<a href='https://github.com/esomjai/Forensic-Craniofacial-Approximation-Database/blob/basics/Start%20here%20/003_ROI%20vs%20Segmentation.md'>Refer to this guide for more detail</a>).<br><br>"
+            "<b>6. Edit the Threshold Range:</b> The minimum is usually 500. (<a href='https://github.com/esomjai/Forensic-Craniofacial-Approximation-Database/blob/basics/Start%20here/003_ROI%20vs%20Segmentation.md'>Refer to this guide for more detail</a>).<br><br>"
             "<b>7. Click 'Apply'</b> (in the Local histogram menu), then find the <b>'Show 3D'</b> button on the top, near to where the 'Add' button was. Click it and wait for the model to appear.<br><br>"
             "<b>8. If you're happy with the details,</b> click on the green right arrow to go to the 'Segmentations' module.<br><br>"
             "<b>9. Double click on the row below 'Name'</b> and in the pop-up, edit the model name into <b>'Bone'</b>.<br><br>"
