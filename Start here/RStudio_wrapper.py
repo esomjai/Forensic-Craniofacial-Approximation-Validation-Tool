@@ -177,7 +177,8 @@ def _classify_role(node_name, landmark_labels=None):
     if n.startswith("stephan_pronasale"):                      return "pred"  # Prokopec
 
     # ---- TRUE (ground truth, exact node names) ----
-    if n.startswith("lmrks_stephan"):                          return "true"  # Stephan
+    if n.startswith("lmrks_stephan"):                          return "true"  # Stephan hard-tissue
+    if n.startswith("soft_tissue_stephan"):                    return "true"  # Stephan soft-tissue truth
     if n.endswith("_lmrks"):                                   return "true"  # Tedeschi
     if n == "krogmaniscan_soft_tissue":                        return "true"  # Threefold
     if n.startswith("ryu_soft_tissue"):                        return "true"  # Ryu
