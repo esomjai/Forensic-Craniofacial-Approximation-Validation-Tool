@@ -192,8 +192,216 @@ def _classify_role(node_name, landmark_labels=None):
     if n.startswith(("pred", "predicted")):                    return "pred"
 
     return "unknown"
+# ==================================================================
+#  Per-run detection
+# ------------------------------------------------------------------
+# Each method has a different convention for what constitutes a "run":
+#
+#   Ridel        — one run per Pred_<timestamp> or Pred_<timestamp>_cNN
+#   Rynn         — one run per soft_tissue_pred_<N>
+#   Ryu          — one run per Predicted_Soft_Tissue_<sex>_<timestamp>
+#   Purkait      — one run per prn variant in lmrk_predictions
+#   Gerasimow    — one run per <True|Predicted>_R2_<combo> (or T1-T2_shortcut)
+#   Prokopec     — one run per <N>p suffix (5p, 6p, 7p, …)
+#   Stephan, TedeschiOliviera, Thitiorul, Threefold
+#                — single run ("default")
+#
+# Returns a list of (variant_name, {point_list -> filter mode}) tuples.
+# Empty list means "no runs — don't write any files for this scene".
+# ==================================================================
+
+def _detect_runs(method):
+    """Return a list of (variant_name, variant_meta) for the current scene.
+
+    variant_meta is used by _collect_landmarks_for_variant to filter
+    which rows of the CSV belong to this run.
+    """
+    method = (method or "").strip()
+
+    # ---- Ridel: one file per Pred_<timestamp>[_cNN] node ----
+    if method == "Ridel":
+        runs = set()
+        for node in slicer.util.getNodesByClass("vtkMRMLMarkupsFiducialNode"):
+            n = node.GetName()
+            if n.startswith("Pred_"):
+                runs.add(n)
+        return [(r, {"point_list_filter": r}) for r in sorted(runs)]
+
+    # ---- Rynn: one file per soft_tissue_pred_<N> ----
+    if method == "Rynn":
+        runs = set()
+        for node in slicer.util.getNodesByClass("vtkMRMLMarkupsFiducialNode"):
+            import re
+            m = re.match(r"soft_tissue_pred_(\d+)", node.GetName())
+            if m:
+                runs.add(f"run{m.group(1)}")
+        return [(r, {"point_list_filter": f"soft_tissue_pred_{r[3:]}"})
+                for r in sorted(runs)]
+
+    # ---- Ryu: one file per Predicted_Soft_Tissue_<sex>_* ----
+    if method == "Ryu":
+        runs = set()
+        for node in slicer.util.getNodesByClass("vtkMRMLMarkupsFiducialNode"):
+            n = node.GetName()
+            if "Predicted_Soft_Tissue" in n:
+                if "Male" in n:   runs.add("Male")
+                elif "Female" in n: runs.add("Female")
+                else:             runs.add("Unknown")
+        return [(s, {"point_list_filter_contains": f"Predicted_Soft_Tissue_{s}"})
+                for s in sorted(runs)]
+
+    # ---- PurkaitSingh: one file per prn variant ----
+    if method == "PurkaitSingh":
+        pred = slicer.util.getFirstNodeByName("lmrk_predictions")
+        runs = set()
+        if pred:
+            for i in range(pred.GetNumberOfControlPoints()):
+                lbl = pred.GetNthControlPointLabel(i)
+                if lbl.lower().startswith("prn"):
+                    variant = lbl.replace("prn_", "").strip("_") or "default"
+                    runs.add(variant)
+        return [(r, {"landmark_filter": r}) for r in sorted(runs)]
+
+    # ---- Gerasimow: one file per T-combination ----
+    if method == "Gerasimov" or method == "Gerasimow":
+        runs = set()
+        import re
+        # Fiducial-based layout (True_R2_<combo>)
+        for node in slicer.util.getNodesByClass("vtkMRMLMarkupsFiducialNode"):
+            m = re.match(r"(?:True|Predicted)_R2_(T\d-T\d)", node.GetName())
+            if m:
+                runs.add(m.group(1))
+        # Line-based layout (error_prn_<combo>_pred_error)
+        for node in slicer.util.getNodesByClass("vtkMRMLMarkupsLineNode"):
+            m = re.match(r"error_(?:prn|R2)_(T\d-T\d)_pred_error",
+                         node.GetName())
+            if m:
+                runs.add(m.group(1))
+        if slicer.util.getFirstNodeByName("T1-T2_prediction_error"):
+            runs.add("T1-T2_shortcut")
+        return [(c, {"gerasimow_combo": c}) for c in sorted(runs)]
+
+    # ---- Prokopec: one file per <N>p suffix ----
+    if method == "ProkopecUbelaker":
+        import re
+        suffixes = set()
+        for node in slicer.util.getNodesByClass("vtkMRMLMarkupsFiducialNode"):
+            m = re.match(r"Stephan_pronasale_(\d+p)", node.GetName())
+            if m:
+                suffixes.add(m.group(1))
+        # SkipScene: no prediction node → return empty list
+        return [(s, {"prokopec_suffix": s}) for s in sorted(suffixes)]
+
+    # ---- Everything else: single run ----
+    return [("default", {})]
+def _collect_landmarks_for_variant(all_landmarks, method, variant_meta):
+    """Filter all_landmarks to only the rows that belong to this run/variant."""
+    method = (method or "").strip()
+    meta = variant_meta or {}
+
+    # ---- Ridel / Rynn: exact point_list match + truth ----
+    if method == "Ridel" and "point_list_filter" in meta:
+        target = meta["point_list_filter"]
+        return [r for r in all_landmarks
+                if r["point_list"] == target
+                or r["point_list"] == "Ridel_soft_tissue"]
+
+    if method == "Rynn" and "point_list_filter" in meta:
+        target = meta["point_list_filter"]
+        return [r for r in all_landmarks
+                if r["point_list"] == target
+                or r["point_list"].startswith("Rynn_soft_tissue")]
+
+    # ---- Ryu: substring match on the pred node + truth ----
+    if method == "Ryu" and "point_list_filter_contains" in meta:
+        needle = meta["point_list_filter_contains"]
+        return [r for r in all_landmarks
+                if (needle in r["point_list"])
+                or r["point_list"] == "Ryu_soft_tissue"]
+
+    # ---- Purkait: filter by landmark within lmrk_predictions + truth ----
+    if method == "PurkaitSingh" and "landmark_filter" in meta:
+        v = meta["landmark_filter"]
+        return [r for r in all_landmarks
+                if (r["point_list"] == "lmrk_predictions"
+                    and v in r["landmark"])
+                or r["point_list"] == "PS_soft_tissue"]
+
+    # ---- Gerasimow: build per-variant truth + pred rows ----
+    if (method in ("Gerasimov", "Gerasimow")) and "gerasimow_combo" in meta:
+        return _collect_gerasimow_variant(all_landmarks,
+                                          meta["gerasimow_combo"])
+
+    # ---- Prokopec: rename truth/pred labels for this suffix ----
+    if method == "ProkopecUbelaker" and "prokopec_suffix" in meta:
+        return _collect_prokopec_variant(all_landmarks,
+                                         meta["prokopec_suffix"])
+
+    # ---- Everything else: no filtering ----
+    return all_landmarks
 
 
+def _collect_gerasimow_variant(all_landmarks, variant):
+    """Extract truth+pred for one Gerasimow combination."""
+    rows = []
+
+    # Layout 1: True_R2_<combo> / Predicted_R2_<combo> fiducials
+    if variant != "T1-T2_shortcut":
+        for r in all_landmarks:
+            pl = r["point_list"]
+            if pl == f"True_R2_{variant}" or pl == f"Predicted_R2_{variant}":
+                rows.append(r)
+        if rows:
+            return rows
+
+    # Layout 2: error lines (prn/R2)
+    for prefix, landmark in (("prn", "pronasale"), ("R2", "R2")):
+        line_name = f"error_{prefix}_{variant}_pred_error"
+        for r in all_landmarks:
+            if r["point_list"] == line_name:
+                rows.append(r)
+
+    # Layout 3: shortcut
+    if variant == "T1-T2_shortcut":
+        for r in all_landmarks:
+            pl = r["point_list"]
+            if pl == "T1-T2_predicted_pronasale":
+                rows.append({**r, "landmark": "pronasale"})
+            elif pl == "Gerasimov_landmarks" and "pronasale" in r["landmark"].lower():
+                rows.append(r)
+
+    return rows
+
+
+def _collect_prokopec_variant(all_landmarks, suffix):
+    """Extract Prokopec rows for one <N>p suffix; rename truth/pred to pronasale."""
+    rows = [r for r in all_landmarks if suffix in r["point_list"]]
+
+    # Rename Stephan_pronasale_<N>p → pronasale
+    for r in rows:
+        if r["point_list"].startswith("Stephan_pronasale"):
+            r = dict(r)          # copy so we don't mutate the original
+            r["landmark"] = "pronasale"
+
+    # Rename highest-numbered nose_profile_outline truth → pronasale
+    truth_labels = [
+        int(r["landmark"]) for r in rows
+        if r["point_list"].startswith("nose_profile_outline")
+        and r["landmark"].isdigit()
+    ]
+    highest = str(max(truth_labels)) if truth_labels else None
+
+    out = []
+    for r in rows:
+        r = dict(r)
+        if r["point_list"].startswith("Stephan_pronasale"):
+            r["landmark"] = "pronasale"
+        elif (r["point_list"].startswith("nose_profile_outline")
+              and highest is not None
+              and r["landmark"] == highest):
+            r["landmark"] = "pronasale"
+        out.append(r)
+    return out
 # ==================================================================
 #  RStudioExporter
 # ==================================================================
@@ -902,21 +1110,44 @@ class RStudioExporter(object):
     # ==========================================================
     #  Write file
     # ==========================================================
-    def write_session_file(self, method, subject_id, session, extra_meta=None):
+    def write_session_file(self, method, subject_id, session, extra_meta=None,
+                           variant=None, landmark_rows=None):
+        """Write one CSV for one run.
+
+        Parameters
+        ----------
+        method : str
+        subject_id : str
+        session : dict   (metadata from prompt_all)
+        extra_meta : dict or None  (per-GUI extras)
+        variant : str or None      (e.g. "Pred_20260914_125422", "run0", "Male")
+        landmark_rows : list or None
+            Pre-filtered landmark rows for this variant.
+            If None, all fiducials are written (single-run mode).
+        """
         stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         region = session.get("region", "unknown")
-        safe_method = re.sub(r"[^A-Za-z0-9_-]", "_", method)
-        safe_id = re.sub(r"[^A-Za-z0-9_-]", "_", subject_id)
-        safe_region = re.sub(r"[^A-Za-z0-9_-]", "_", region)
-        filename = f"{stamp}_{safe_method}_{safe_id}_{safe_region}.csv"
-        path = os.path.join(self.folder, filename)
 
+        safe_method  = re.sub(r"[^A-Za-z0-9_-]", "_", method)
+        safe_id      = re.sub(r"[^A-Za-z0-9_-]", "_", subject_id)
+        safe_region  = re.sub(r"[^A-Za-z0-9_-]", "_", region)
+        safe_variant = re.sub(r"[^A-Za-z0-9_-]", "_",
+                              variant if variant else "default")
+
+        # ---- Per-method folder + per-run filename ----
+        filename = (f"{stamp}_{safe_method}_{safe_id}_{safe_region}"
+                    f"_{safe_variant}.csv")
+        method_folder = os.path.join(self.folder, safe_method)
+        os.makedirs(method_folder, exist_ok=True)
+        path = os.path.join(method_folder, filename)
+
+        # ---- Metadata (same as before) ----
         meta_rows = []
         meta_rows.append(("# SESSION", ""))
         meta_rows.append(("export_datetime",
                           datetime.datetime.now().isoformat(timespec="seconds")))
         meta_rows.append(("method", method))
-        meta_rows.append(("variant", session.get("variant", "")))
+        meta_rows.append(("variant", variant or "default"))
         meta_rows.append(("region", session.get("region", "")))
         meta_rows.append(("plane_method", session.get("plane_method", "")))
         meta_rows.append(("subject_id", subject_id))
@@ -965,12 +1196,6 @@ class RStudioExporter(object):
                                       f"{sp[0]:.3f} {sp[1]:.3f} {sp[2]:.3f}"))
                 except Exception:
                     pass
-                try:
-                    rng = v.GetImageData().GetScalarRange()
-                    meta_rows.append((f"volume_{idx}_scalar_range",
-                                      f"{rng[0]:.1f} {rng[1]:.1f}"))
-                except Exception:
-                    pass
         except Exception:
             pass
 
@@ -982,10 +1207,8 @@ class RStudioExporter(object):
                 meta_rows.append((f"model_{idx}_name", m.GetName()))
                 try:
                     pd = m.GetPolyData()
-                    meta_rows.append((f"model_{idx}_points",
-                                      pd.GetNumberOfPoints()))
-                    meta_rows.append((f"model_{idx}_cells",
-                                      pd.GetNumberOfCells()))
+                    meta_rows.append((f"model_{idx}_points", pd.GetNumberOfPoints()))
+                    meta_rows.append((f"model_{idx}_cells", pd.GetNumberOfCells()))
                 except Exception:
                     pass
         except Exception:
@@ -1014,7 +1237,11 @@ class RStudioExporter(object):
         meta_rows.append(("# NOTES", ""))
         meta_rows.append(("notes", session.get("notes", "")))
 
-        # Write
+        # ---- Landmarks: use filtered rows if provided ----
+        if landmark_rows is None:
+            landmark_rows = self._collect_landmarks()
+
+        # ---- Write ----
         with open(path, "w", newline="", encoding="utf-8") as f:
             w = csv.writer(f)
             w.writerow(["key", "value"])
@@ -1023,12 +1250,12 @@ class RStudioExporter(object):
             w.writerow(["# BEGIN_DATA", ""])
             w.writerow(["point_list", "landmark", "definition", "role",
                         "R_A_S_X", "R_A_S_Y", "R_A_S_Z"])
-            for r in self._collect_landmarks():
+            for r in landmark_rows:
                 w.writerow([r["point_list"], r["landmark"], r["definition"],
-                            r["role"],
+                            r.get("role", "unknown"),
                             f"{r['R']:.4f}", f"{r['A']:.4f}", f"{r['S']:.4f}"])
-        return path
 
+        return path
 
 # ==================================================================
 #  Singleton
@@ -1049,8 +1276,8 @@ def install_export_button_for(gui,
                               parent_layout,
                               method,
                               variant="auto",
-                              table_widget=None,          # kept for compat
-                              measurement_provider=None,  # kept for compat
+                              table_widget=None,
+                              measurement_provider=None,
                               metadata_provider=None,
                               button_label="Export for RStudio",
                               style=None):
@@ -1066,6 +1293,7 @@ def install_export_button_for(gui,
     def on_click():
         ex = get_exporter()
 
+        # Ask user about folder
         if qt.QMessageBox.question(
             gui, "Export folder",
             f"Export to:\n{ex.folder}\n\nChange folder?",
@@ -1076,37 +1304,83 @@ def install_export_button_for(gui,
 
         auto_plane = ex._detect_plane_method()
 
+        # Two prompts (identity + DICOM) + session dialog
         session = ex.prompt_all(gui, method, auto_plane)
         if session is None:
             return
 
-        # Variant resolution
-        resolved_variant = variant
-        if variant == "auto":
-            resolved_variant = _derive_variant(method, session)
-        elif callable(variant):
-            try:
-                resolved_variant = variant()
-            except Exception:
-                resolved_variant = "default"
-        session["variant"] = resolved_variant
+        # ---- Detect runs for this method ----
+        runs = _detect_runs(method)
+        if not runs:
+            slicer.util.infoDisplay(
+                f"No runs detected for {method}. "
+                "Nothing was written.")
+            return
 
-        extra = None
-        if metadata_provider:
+        # ---- Collect all landmarks once (expensive; do it once) ----
+        all_landmarks = ex._collect_landmarks()
+
+        # ---- Write one CSV per run ----
+        written = []
+        for variant_name, variant_meta in runs:
+            # Filter landmarks for this run
+            filtered = _collect_landmarks_for_variant(
+                all_landmarks, method, variant_meta)
+            if not filtered:
+                print(f"[export] {method} / {variant_name}: "
+                      "no landmarks matched — skipping")
+                continue
+
+            # Variant resolution
+            resolved_variant = variant
+            if variant == "auto":
+                resolved_variant = _derive_variant(method, session)
+            elif callable(variant):
+                try:
+                    resolved_variant = variant()
+                except Exception:
+                    resolved_variant = "default"
+
+            session["variant"] = resolved_variant
+
+            extra = None
+            if metadata_provider:
+                try:
+                    extra = metadata_provider()
+                except Exception as e:
+                    print(f"metadata_provider failed: {e}")
+
             try:
-                extra = metadata_provider()
+                path = ex.write_session_file(
+                    method=method,
+                    subject_id=session["subject_id"],
+                    session=session,
+                    extra_meta=extra,
+                    variant=variant_name,
+                    landmark_rows=filtered,
+                )
+                written.append((variant_name, os.path.basename(path),
+                                len(filtered)))
             except Exception as e:
-                print(f"metadata_provider failed: {e}")
+                print(f"[export] {method} / {variant_name}: "
+                      f"write failed — {e}")
 
-        path = ex.write_session_file(
-            method=method,
-            subject_id=session["subject_id"],
-            session=session,
-            extra_meta=extra,
-        )
+        # ---- Summary dialog ----
+        if not written:
+            slicer.util.warningDisplay(
+                f"No files written for {method}.")
+            return
 
-        slicer.util.infoDisplay(
-            f"Exported:\n{os.path.basename(path)}\n\nFolder: {ex.folder}")
+        summary_lines = [
+            f"Exported {len(written)} file(s) for {method}:",
+            ""
+        ]
+        for vname, fname, nrows in written:
+            summary_lines.append(f"  [{vname}] {fname}  ({nrows} landmarks)")
+        summary_lines.append("")
+        summary_lines.append(f"Folder: {os.path.join(ex.folder, method)}")
+
+        slicer.util.infoDisplay("\n".join(summary_lines))
 
     button.clicked.connect(on_click)
     parent_layout.addWidget(button)
