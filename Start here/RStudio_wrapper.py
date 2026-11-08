@@ -187,7 +187,7 @@ def _classify_role(node_name, landmark_labels=None):
     if n == "ps_soft_tissue":                                  return "true"  # Purkait
     if n.startswith("nose_profile_outline"):                   return "true"  # Prokopec
 
-    # ---- Generic fallbacks (Gerasimow, Thitiorul, future methods) ----
+    # ---- Generic fallbacks (Gerasimov, Thitiorul, future methods) ----
     if n.startswith("true"):                                   return "true"
     if n.startswith(("pred", "predicted")):                    return "pred"
 
@@ -201,7 +201,7 @@ def _classify_role(node_name, landmark_labels=None):
 #   Rynn         — one run per soft_tissue_pred_<N>
 #   Ryu          — one run per Predicted_Soft_Tissue_<sex>_<timestamp>
 #   Purkait      — one run per prn variant in lmrk_predictions
-#   Gerasimow    — one run per <True|Predicted>_R2_<combo> (or T1-T2_shortcut)
+#   Gerasimov    — one run per <True|Predicted>_R2_<combo> (or T1-T2_shortcut)
 #   Prokopec     — one run per <N>p suffix (5p, 6p, 7p, …)
 #   Stephan, TedeschiOliviera, Thitiorul, Threefold
 #                — single run ("default")
@@ -262,8 +262,8 @@ def _detect_runs(method):
                     runs.add(variant)
         return [(r, {"landmark_filter": r}) for r in sorted(runs)]
 
-    # ---- Gerasimow: one file per T-combination ----
-    if method == "Gerasimov" or method == "Gerasimow":
+    # ---- Gerasimov: one file per T-combination ----
+    if method == "Gerasimov" or method == "Gerasimov":
         runs = set()
         import re
         # Fiducial-based layout (True_R2_<combo>)
@@ -279,7 +279,7 @@ def _detect_runs(method):
                 runs.add(m.group(1))
         if slicer.util.getFirstNodeByName("T1-T2_prediction_error"):
             runs.add("T1-T2_shortcut")
-        return [(c, {"gerasimow_combo": c}) for c in sorted(runs)]
+        return [(c, {"Gerasimov_combo": c}) for c in sorted(runs)]
 
     # ---- Prokopec: one file per <N>p suffix ----
     if method == "ProkopecUbelaker":
@@ -327,10 +327,10 @@ def _collect_landmarks_for_variant(all_landmarks, method, variant_meta):
                     and v in r["landmark"])
                 or r["point_list"] == "PS_soft_tissue"]
 
-    # ---- Gerasimow: build per-variant truth + pred rows ----
-    if (method in ("Gerasimov", "Gerasimow")) and "gerasimow_combo" in meta:
-        return _collect_gerasimow_variant(all_landmarks,
-                                          meta["gerasimow_combo"])
+    # ---- Gerasimov: build per-variant truth + pred rows ----
+    if (method in ("Gerasimov", "Gerasimov")) and "Gerasimov_combo" in meta:
+        return _collect_Gerasimov_variant(all_landmarks,
+                                          meta["Gerasimov_combo"])
 
     # ---- Prokopec: rename truth/pred labels for this suffix ----
     if method == "ProkopecUbelaker" and "prokopec_suffix" in meta:
@@ -341,8 +341,8 @@ def _collect_landmarks_for_variant(all_landmarks, method, variant_meta):
     return all_landmarks
 
 
-def _collect_gerasimow_variant(all_landmarks, variant):
-    """Extract truth+pred for one Gerasimow combination."""
+def _collect_Gerasimov_variant(all_landmarks, variant):
+    """Extract truth+pred for one Gerasimov combination."""
     rows = []
 
     # Layout 1: True_R2_<combo> / Predicted_R2_<combo> fiducials

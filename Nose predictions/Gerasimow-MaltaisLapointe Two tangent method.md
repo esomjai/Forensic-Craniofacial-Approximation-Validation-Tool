@@ -1,4 +1,4 @@
-# The Two Tangent Method by Gerasimow, 1955[^2], its revision by Maltais-Lapointe (2016)[^14] based on Ullrich and Stephan (2011)[^7]
+# The Two Tangent Method by Gerasimov, 1955[^2], its revision by Maltais-Lapointe (2016)[^14] based on Ullrich and Stephan (2011)[^7]
 # Table of Contents
 
 1.  [Literature context](#literature-context)
@@ -8,7 +8,7 @@
     *   [Profile plane](#profile-plane)
     *   [Segmentation](#segmentation)
     *   [Profile view model](#profile-view-model)
-    *   [Establishing the tangents (Gerasimow)](#establishing-the-tangents-gerasimow)
+    *   [Establishing the tangents (Gerasimov)](#establishing-the-tangents-Gerasimov)
     *   [Elongating the tangents](#elongating-the-tangents)
     *   [Error rates](#error-rates)
 2.  [Maltais-Lapointe (2016)'s method](#maltais-lapointe-2016s-method)
@@ -23,7 +23,7 @@ Limitations occur in describing this method in detail as his works are available
 
 The summarised theory is that the tip of the soft nose (pronasale) can be predicted by where two tangents meet: (a) the tangent running between the nasion to rhinion OR the line following the bony nose shape in profile view and (b) the tangent aligning with the anterior 1/3rd of the nasal spine OR following its direction as an arrow.
 
-The method followed here will split into two: the first will be called  **Gerasimow** which is the one described by Gatliff (1984)[^8], as the interpretation by Stephan (2003)[^9] was later scrutinised by Rynn and Wilkinson (2006)[^10] and Rynn et al. (2012)[^11]; meanwhile the second will be called as the **Maltais-Lapointe** incorporating their whole study which includes the original Gerasimow and the later interpretation (Ullrich and Stephan, 2011) in one[^7]. 
+The method followed here will split into two: the first will be called  **Gerasimov** which is the one described by Gatliff (1984)[^8], as the interpretation by Stephan (2003)[^9] was later scrutinised by Rynn and Wilkinson (2006)[^10] and Rynn et al. (2012)[^11]; meanwhile the second will be called as the **Maltais-Lapointe** incorporating their whole study which includes the original Gerasimov and the later interpretation (Ullrich and Stephan, 2011) in one[^7]. 
 
 ### Summary
 
@@ -47,7 +47,7 @@ The method followed here will split into two: the first will be called  **Gerasi
 | 5                | 6                | pronasale    | pronasale     | The most anteriorly protruded point of the apex nasi. In the case of a bifid nose, the more protruding tip is chosen           | Caple and Stephan 2016[^11]|
 | 6                | 7                | Reference point 2    | R2     |The point where the T4 crosses the surface of the nasal soft tissue on the midsagittal plane      | Maltais Lapointe 2016[^14]|
 
-[Gerasimow_landmarks.mrk.json](https://github.com/user-attachments/files/28797197/Gerasimow_landmarks.mrk.json)
+[Gerasimov_landmarks.mrk.json](https://github.com/user-attachments/files/28797197/Gerasimov_landmarks.mrk.json)
 
 
 > [!WARNING]
@@ -83,7 +83,7 @@ Credit to Tinotenda Chiyangwa©[^15]
 
 
 If you want to see how the code snippets individually build up these two methods, please read on.
-If you rather employ a graphic user interface, copy and paste the contents of this [link:](https://github.com/esomjai/Forensic-Craniofacial-Approximation-Database/blob/19d56a56ac868fd39836058d551f5d054fe5bf53/Nose%20predictions/GerasimowMaltaisLapointe%20GUI.md)  into the python console. 
+If you rather employ a graphic user interface, copy and paste the contents of this [link:](https://github.com/esomjai/Forensic-Craniofacial-Approximation-Database/blob/19d56a56ac868fd39836058d551f5d054fe5bf53/Nose%20predictions/GerasimovMaltaisLapointe%20GUI.md)  into the python console. 
 
 
 ### Profile plane
@@ -96,7 +96,7 @@ To help with the side profile, we will establish either MSP or INB plane, depend
 “MSP” plane  defined by any landmarks described as midline: nasion, acanthion and rhinion
 
 Download the markups file for this method: 
-[Gerasimow_landmarks.mrk.json](https://github.com/user-attachments/files/28797197/Gerasimow_landmarks.mrk.json)
+[Gerasimov_landmarks.mrk.json](https://github.com/user-attachments/files/28797197/Gerasimov_landmarks.mrk.json)
  Then choose the plane you can create based on landmarks that can be placed on the skull you work with, allocate the  landmarks and copy and paste the following code:the code snippet of your choosing. 
 
 The codes use a centroid origin, calculated from the landmarks that weights all plane-defining landmarks equally and  normal vector based on the same landmarks. 
@@ -110,8 +110,8 @@ The codes use a centroid origin, calculated from the landmarks that weights all 
 import numpy as np
 import slicer
 
-# Get the points from the "Gerasimow_landmarks" node
-hardTissueNode = slicer.util. getNode('Gerasimow_landmarks')
+# Get the points from the "Gerasimov_landmarks" node
+hardTissueNode = slicer.util. getNode('Gerasimov_landmarks')
 nasion = np.array(hardTissueNode.GetNthControlPointPosition(0))    # point1: nasion
 inion = np.array(hardTissueNode.GetNthControlPointPosition(1))     # point2: inion
 bregma = np.array(hardTissueNode.GetNthControlPointPosition(2))    # point3: bregma
@@ -148,8 +148,8 @@ If using the nasion, acanthion and rhinion landmarks, use this snippet:
 import numpy as np
 import slicer
 
-#Get the points from the "Gerasimow_landmarks" node
-hardTissueNode = slicer.util.getNode('Gerasimow_landmarks')
+#Get the points from the "Gerasimov_landmarks" node
+hardTissueNode = slicer.util.getNode('Gerasimov_landmarks')
 nasion = np.array(hardTissueNode.GetNthControlPointPosition(0))
 acanthion = np.array(hardTissueNode.GetNthControlPointPosition(4))
 rhinion = np.array(hardTissueNode.GetNthControlPointPosition(3))
@@ -192,7 +192,7 @@ In case still need the red/green/yellow slice windows for precise landmark place
 
 ### Profile view model
 
-For the T2 (tangent following the direction of the anterior nasal spine) both in original Gerasimow and the following Maltais-LaPointe method, a profile view (of the Bone model cut along the profile plane) will be useful. 
+For the T2 (tangent following the direction of the anterior nasal spine) both in original Gerasimov and the following Maltais-LaPointe method, a profile view (of the Bone model cut along the profile plane) will be useful. 
 
 <details>
 <summary>Profile view model intructions</summary>
@@ -233,11 +233,11 @@ And you should have the following individual views (excluding/hiding the origina
 You can now allocate the remainder of the landmarks on either model - they should appear on ALL of them. 
 </details>
 
-### Establishing the tangents (Gerasimow)
+### Establishing the tangents (Gerasimov)
 If you want to do this by hand, you can follow the steps below. 
-Alternatively, you can use the [GUI](https://github.com/esomjai/Forensic-Craniofacial-Approximation-Database/blob/19d56a56ac868fd39836058d551f5d054fe5bf53/Nose%20predictions/GerasimowMaltaisLapointe%20GUI.md). Just copy-paste the code into the Python Console in Slicer and amke sure you tick the box saying **Use T1-T2 Shortcut**. 
+Alternatively, you can use the [GUI](https://github.com/esomjai/Forensic-Craniofacial-Approximation-Database/blob/19d56a56ac868fd39836058d551f5d054fe5bf53/Nose%20predictions/GerasimovMaltaisLapointe%20GUI.md). Just copy-paste the code into the Python Console in Slicer and amke sure you tick the box saying **Use T1-T2 Shortcut**. 
 
-If you want to just re-create Gerasimow's method by hand, follow the steps creating tangent1 and tangent2, with the adjusting codes. 
+If you want to just re-create Gerasimov's method by hand, follow the steps creating tangent1 and tangent2, with the adjusting codes. 
 
 Re-orient the view of either your left-bone model to see its right side OR your right-bone model to see its left side to look inside the cranium: 
 
@@ -277,7 +277,7 @@ except:
         raise RuntimeError("Neither INB nor MSP plane found!  Please create one first.")
 
 # Retrieve the point from hard tissue
-hard_tissue = slicer.util.getNode('Gerasimow_landmarks')
+hard_tissue = slicer.util.getNode('Gerasimov_landmarks')
 point = hard_tissue.GetNthControlPointPosition(4)
 
 # Function to project a point onto a plane
@@ -384,7 +384,7 @@ print(f"New tangent2 end point: {new_tangent2_end}")
 </details>
 
 ### Error rates
-As a research question, you can also allocate the original pronasale (included in the _Gerasimow landmarks.lmrk.json_ as the last item) and check the error rate (copy and paste the code "prn error"). 
+As a research question, you can also allocate the original pronasale (included in the _Gerasimov landmarks.lmrk.json_ as the last item) and check the error rate (copy and paste the code "prn error"). 
 
 ```python
 ###prn error####
@@ -393,7 +393,7 @@ import slicer
 import numpy as np
 
 # Retrieve the points
-hard_tissue = slicer.util.getNode('Gerasimow landmarks')
+hard_tissue = slicer.util.getNode('Gerasimov landmarks')
 point1 = hard_tissue.GetNthControlPointPosition(5)
 
 prn_pred = slicer.util.getNode('prn pred')
@@ -439,9 +439,9 @@ You'll need to draw all these tangents by hand and name them "tangent1", "tangen
 
 https://github.com/user-attachments/assets/9d0c3401-cbd3-4846-9670-b5050c024b84 
 
-To place the second point of reference in addition to the pronasale, make "tangent2" visible in the "Markups" module, then change into the Skin segmentation to place these landmarks found in "Gerasimow_landmarks" on both sides. In the original study, this is looked at in 2D, so is one point, but in 3D Slicer and 3D view we will take the line connecting them and where it "pierces" the INB plane. This new point will be added to the end of the pre-existing node list. Then, the created intersection points will be connected to the soft tissue pronasale and R2 to measure errors; the ones in relation to the pronasale with a deep red, while the R2 ones with a bright coral.
+To place the second point of reference in addition to the pronasale, make "tangent2" visible in the "Markups" module, then change into the Skin segmentation to place these landmarks found in "Gerasimov_landmarks" on both sides. In the original study, this is looked at in 2D, so is one point, but in 3D Slicer and 3D view we will take the line connecting them and where it "pierces" the INB plane. This new point will be added to the end of the pre-existing node list. Then, the created intersection points will be connected to the soft tissue pronasale and R2 to measure errors; the ones in relation to the pronasale with a deep red, while the R2 ones with a bright coral.
 
-Alternatively, use the [GUI](https://github.com/esomjai/Forensic-Craniofacial-Approximation-Database/blob/19d56a56ac868fd39836058d551f5d054fe5bf53/Nose%20predictions/GerasimowMaltaisLapointe%20GUI.md) for programmatically established *tangent4* and *R2* based on two nasal floor lines. 
+Alternatively, use the [GUI](https://github.com/esomjai/Forensic-Craniofacial-Approximation-Database/blob/19d56a56ac868fd39836058d551f5d054fe5bf53/Nose%20predictions/GerasimovMaltaisLapointe%20GUI.md) for programmatically established *tangent4* and *R2* based on two nasal floor lines. 
 
 <details>
 <summary>Code for tangents</summary>
@@ -451,8 +451,8 @@ Alternatively, use the [GUI](https://github.com/esomjai/Forensic-Craniofacial-Ap
 import numpy as np
 import slicer
 
-# Retrieve the "Gerasimow_landmarks" node
-landmarks_node = slicer.util.getNode('Gerasimow_landmarks')
+# Retrieve the "Gerasimov_landmarks" node
+landmarks_node = slicer.util.getNode('Gerasimov_landmarks')
 
 # Get the points at positions 6 and 7
 point6 = np.array(landmarks_node.GetNthControlPointPosition(6))
@@ -491,7 +491,7 @@ def find_intersection_with_plane(line_start, line_end, plane_origin, plane_norma
 # Find the intersection point of the "RR2-LR2" line with the plane
 intersection_point = find_intersection_with_plane(point6, point7, plane_origin, plane_normal)
 
-# Add the intersection point to the "Gerasimow landmarks" node
+# Add the intersection point to the "Gerasimov landmarks" node
 landmarks_node.AddControlPoint(intersection_point, 'R2')
 
 # Update the scene
@@ -680,7 +680,7 @@ print("Prediction points created")
 import slicer
 import numpy as np
 
-def create_line_between_points(point1_index, point2_index, line_name, color, node1_name='Gerasimow_landmarks', node2_name='prediction points'):
+def create_line_between_points(point1_index, point2_index, line_name, color, node1_name='Gerasimov_landmarks', node2_name='prediction points'):
     # Retrieve the points
     node1 = slicer.util.getNode(node1_name)
     point1 = [0.0, 0.0, 0.0]
@@ -700,14 +700,14 @@ def create_line_between_points(point1_index, point2_index, line_name, color, nod
     line_node.GetDisplayNode().SetColor(*color)
 
 # Example usage with custom node names
-create_line_between_points(5, 0, 'prn T1-T2 pred error', (128/255, 0/255, 32/255), node1_name='Gerasimow_landmarks', node2_name='prediction points')
-create_line_between_points(5, 1, 'prn T1-T4 pred error', (128/255, 0/255, 32/255), node1_name='Gerasimow_landmarks', node2_name='prediction points')
-create_line_between_points(5, 2, 'prn T3-T2 pred error', (128/255, 0/255, 32/255), node1_name='Gerasimow_landmarks', node2_name='prediction points')
-create_line_between_points(5, 3, 'prn T3-T4 pred error', (128/255, 0/255, 32/255), node1_name='Gerasimow_landmarks', node2_name='prediction points')
-create_line_between_points(8, 0, 'R2 T1-T2 pred error', (255/255, 69/255, 0/255), node1_name='Gerasimow_landmarks', node2_name='prediction points')
-create_line_between_points(8, 1, 'R2 T1-T4 pred error', (255/255, 69/255, 0/255), node1_name='Gerasimow_landmarks', node2_name='prediction points')
-create_line_between_points(8, 2, 'R2 T3-T2 pred error', (255/255, 69/255, 0/255), node1_name='Gerasimow_landmarks', node2_name='prediction points')
-create_line_between_points(8, 3, 'R2 T3-T4 pred error', (255/255, 69/255, 0/255), node1_name='Gerasimow_landmarks', node2_name='prediction points')
+create_line_between_points(5, 0, 'prn T1-T2 pred error', (128/255, 0/255, 32/255), node1_name='Gerasimov_landmarks', node2_name='prediction points')
+create_line_between_points(5, 1, 'prn T1-T4 pred error', (128/255, 0/255, 32/255), node1_name='Gerasimov_landmarks', node2_name='prediction points')
+create_line_between_points(5, 2, 'prn T3-T2 pred error', (128/255, 0/255, 32/255), node1_name='Gerasimov_landmarks', node2_name='prediction points')
+create_line_between_points(5, 3, 'prn T3-T4 pred error', (128/255, 0/255, 32/255), node1_name='Gerasimov_landmarks', node2_name='prediction points')
+create_line_between_points(8, 0, 'R2 T1-T2 pred error', (255/255, 69/255, 0/255), node1_name='Gerasimov_landmarks', node2_name='prediction points')
+create_line_between_points(8, 1, 'R2 T1-T4 pred error', (255/255, 69/255, 0/255), node1_name='Gerasimov_landmarks', node2_name='prediction points')
+create_line_between_points(8, 2, 'R2 T3-T2 pred error', (255/255, 69/255, 0/255), node1_name='Gerasimov_landmarks', node2_name='prediction points')
+create_line_between_points(8, 3, 'R2 T3-T4 pred error', (255/255, 69/255, 0/255), node1_name='Gerasimov_landmarks', node2_name='prediction points')
 
 print("Error measurement lines created")
 ```
@@ -721,7 +721,7 @@ print("Error measurement lines created")
 If you want to copy all linear measurements in the scene for data collection, refer to [this guide](https://github.com/esomjai/Forensic-Craniofacial-Approximation-Database/blob/7b9aaccce0aaf54cdb91d4888bd12ac06ac452c0/Start%20here%20/004_Copy%20measurements%20to%20clipboard.md)
 
 #### Tangents1 and 2 with error
-If you only executed the original Gerasimow two tangent method with the error rates added, your output will look like this: 
+If you only executed the original Gerasimov two tangent method with the error rates added, your output will look like this: 
 
 | (unknown) | tangent1   | 76.67370706918534 |
 |-----------|------------|-------------------|

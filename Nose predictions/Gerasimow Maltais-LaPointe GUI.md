@@ -2262,7 +2262,7 @@ class GerasimovNosePredictor(qt.QWidget):
     # ========================================================================
     def onDownloadLandmarksClicked(self):
         """Download landmarks from GitHub"""
-        url = "https://github.com/user-attachments/files/28797197/Gerasimow_landmarks.mrk.json"
+        url = "https://github.com/user-attachments/files/28797197/Gerasimov_landmarks.mrk.json"
         self.step1StatusLabel.setText("Status: Downloading...")
         slicer.app.processEvents()
 
