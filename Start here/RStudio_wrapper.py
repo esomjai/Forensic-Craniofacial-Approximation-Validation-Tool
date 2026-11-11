@@ -550,14 +550,16 @@ class RStudioExporter(object):
 
         # ---------- First-use prompt for archive root ----------
         if not archive_root:
-            root, ok = qt.QInputDialog.getText(
+            root = qt.QInputDialog.getText(
                 parent,
                 "Set DICOM archive root",
                 "Enter the folder where all subject DICOM archives live.\n\n"
                 "The wrapper will look for a subfolder named after the "
                 "subject ID inside this root on every export.\n\n"
                 "You can leave this blank and pick folders manually each time.")
-            if ok and root.strip():
+            
+            # Slicer just returns a string. If they cancel or leave it blank, it's empty.
+            if root and root.strip():
                 archive_root = root.strip()
                 if self._settings:
                     self._settings.setValue(
