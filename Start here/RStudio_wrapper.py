@@ -954,7 +954,7 @@ class RStudioExporter(object):
             "notes": notes_edit.toPlainText().strip(),
         }
         for key, edit in b_fields.items():
-            session[key] = edit.text().strip()
+            session[key] = edit.text.strip()
         return session
 
     # ==========================================================
