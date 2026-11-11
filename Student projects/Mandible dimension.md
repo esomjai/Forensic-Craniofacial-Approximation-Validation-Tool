@@ -1,10 +1,28 @@
+# GUI for paper titled **Mandible morphological estimation: A reliability and population-specific study on a White American virtual sample** by Davies et al. 2026
+
+DOI: 10.1016/j.forsciint.2026.113174
+
+If used, cite as: 
+
+Davies H, Houlton TMR, Mânica S, Pandey H, Somjai E, García-Donas JG. Mandible morphological estimation: A reliability and population-specific study on a White American virtual sample. Forensic Science International. 2027;390:113174.
+
+
+Landmark files: 
+
 [Ramus Breadth.mrk.json](https://github.com/user-attachments/files/26058966/Ramus.Breadth.mrk.json)
+
 [R Minimum zygomatic thickness Rynn.mrk.json](https://github.com/user-attachments/files/26058965/R.Minimum.zygomatic.thickness.Rynn.mrk.json)
+
 [R Maximum zygomatic thickness Rynn.mrk.json](https://github.com/user-attachments/files/26058964/R.Maximum.zygomatic.thickness.Rynn.mrk.json)
+
 [L Minimum zygomatic thickness Rynn.mrk.json](https://github.com/user-attachments/files/26058962/L.Minimum.zygomatic.thickness.Rynn.mrk.json)
+
 [L Maximum zygomatic thickness Rynn.mrk.json](https://github.com/user-attachments/files/26058961/L.Maximum.zygomatic.thickness.Rynn.mrk.json)
+
 [FHP_landmarks.json](https://github.com/user-attachments/files/26058950/FHP_landmarks.json)
+
 [landmarks.mrk.json](https://github.com/user-attachments/files/26087029/landmarks.mrk.json)
+
 
 
 
