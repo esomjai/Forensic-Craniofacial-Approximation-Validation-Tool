@@ -163,7 +163,7 @@ class ReportWindow(qt.QWidget):
                     value_str = f"{item['value']:.2f}"
                 else:
                     value_str = str(item['value'])
-                lines.append(f"{category}\t{item['id']}\t{item['measurement']}\t{value_str}\t{item['unit']}")
+                lines.append(f"{category}\t{item['id']}\t{item['measurement']}\t{value_str}\t{item['unit']}\t{item['std_id']}")
         return "\n".join(lines)
 
     def has_result(self, category, item_id):
@@ -328,11 +328,11 @@ class RynnMethodLogic:
             "pred Bulut M NH": "0.784*Z+9.858",
             # NL
             "pred Rynn EA NL": "0.74*Z+3.5",
-            "pred Sarilita F NL": "0.71*Z+6.624",
-            "pred Sarilita M NL": "0.807*Z+0.764",
-            "pred Bulut F NL": "0.71*Z+6.624",
-            "pred Bulut M NL": "0.66*X+7.77",
-        }
+            "pred Sarilita F NL": "0.66*X+7.77",      # FIXED (was 0.71*Z+6.624)
+            "pred Sarilita M NL": "0.66*X+7.77",      # FIXED (was 0.807*Z+0.764)
+            "pred Bulut F NL": "0.71*Z+6.624",        # Correct
+            "pred Bulut M NL": "0.807*Z+0.764",       # FIXED (was 0.66*X+7.77)
+            }
 
     def get_landmark_canonical(self, label):
         if label is None:
@@ -696,6 +696,7 @@ class RynnMethodLogic:
                 final_pos = pa_end_pos + direction * length
 
                 line_node = self.create_line("PV", pa_end_pos, final_pos, color=(0.2, 0.8, 0.2), use_run_number=True)
+                line_node.SetAttribute("Equation", eq_name)   # ← add this
                 point_label = f"pronasale_{line_node.GetName()}"
                 pred_node.AddControlPoint(final_pos, point_label)
 
@@ -824,10 +825,10 @@ class RynnMethodLogic:
         }
         nl_map = {
             "pred Rynn EA NL": (0.74, z_len, 3.5, "0.74*Z+3.5"),
-            "pred Sarilita F NL": (0.71, z_len, 6.624, "0.71*Z+6.624"),
-            "pred Sarilita M NL": (0.807, z_len, 0.764, "0.807*Z+0.764"),
-            "pred Bulut F NL": (0.71, z_len, 6.624, "0.71*Z+6.624"),
-            "pred Bulut M NL": (0.66, x_len, 7.77, "0.66*X+7.77")
+            "pred Sarilita F NL": (0.66, x_len, 7.77, "0.66*X+7.77"),      # FIXED
+            "pred Sarilita M NL": (0.66, x_len, 7.77, "0.66*X+7.77"),      # FIXED
+            "pred Bulut F NL": (0.71, z_len, 6.624, "0.71*Z+6.624"),       # Correct
+            "pred Bulut M NL": (0.807, z_len, 0.764, "0.807*Z+0.764")      # FIXED
         }
 
         nh_coeff, nh_var, nh_const, nh_eq_str = nh_map[nh_equation]
@@ -1794,10 +1795,10 @@ class Step8_Nasion(StepWidget):
         nl_table_html = """<b>NL (Nasal Length) Equations</b><table border="1" cellspacing="0" cellpadding="3" width="100%">
             <tr><th>Literature</th><th>Ancestry</th><th>Sex</th><th>Equation</th></tr>
             <tr><td>Rynn 2010</td><td>European American</td><td>ANY</td><td>0.74*Z+3.5</td></tr>
-            <tr><td>Sarilita 2018</td><td>Indonesian</td><td>Female</td><td>0.71*Z+6.624</td></tr>
-            <tr><td>Sarilita 2018</td><td>Indonesian</td><td>Male</td><td>0.807*Z+0.764</td></tr>
+            <tr><td>Sarilita 2018</td><td>Indonesian</td><td>Female</td><td>0.66*X+7.77</td></tr>
+            <tr><td>Sarilita 2018</td><td>Indonesian</td><td>Male</td><td>0.66*X+7.77</td></tr>
             <tr><td>Bulut 2019</td><td>Turkish</td><td>Female</td><td>0.71*Z+6.624</td></tr>
-            <tr><td>Bulut 2019</td><td>Turkish</td><td>Male</td><td>0.66*X+7.77</td></tr>
+            <tr><td>Bulut 2019</td><td>Turkish</td><td>Male</td><td>0.807*Z+0.764</td></tr>
             </table><br><b>X</b> = X-axis, <b>Z</b> = Z-axis"""
 
         self.nh_group = qt.QGroupBox("1. Choose NH center ('sn' point)")
