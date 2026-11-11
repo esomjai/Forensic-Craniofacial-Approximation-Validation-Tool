@@ -50,16 +50,6 @@ except ImportError:
     _PYDICOM_AVAILABLE = False
 
 
-# ------------------------------------------------------------------
-#  Version-reference image shown in the identity prompt
-# ------------------------------------------------------------------
-CODE_VERSION_IMAGE_URL = (
-    "https://raw.githubusercontent.com/esomjai/"
-    "Forensic-Craniofacial-Approximation-Validation-Tool/"
-    "2b64cc450d409ad1dfc19e00d8c6062e4b284fee/"
-    "Nose%20predictions/images/"
-    "Screenshot%202026-10-06%20111753.png"
-)
 
 # Text used for fields that could not be retrieved automatically
 FAILED_TAG = "(failed to retrieve from DICOM)"
@@ -495,27 +485,7 @@ class RStudioExporter(object):
         layout.setSpacing(10)
         layout.setContentsMargins(15, 15, 15, 15)
 
-        image_label = QLabel()
-        image_label.setAlignment(Qt.AlignCenter)
-        image_label.setText("Loading reference image...")
-        layout.addWidget(image_label)
-
-        try:
-            import urllib.request
-            with urllib.request.urlopen(CODE_VERSION_IMAGE_URL,
-                                        timeout=8) as r:
-                data = r.read()
-            pixmap = QPixmap()
-            pixmap.loadFromData(data)
-            if not pixmap.isNull():
-                target_h = 180
-                if pixmap.height() > target_h:
-                    pixmap = pixmap.scaledToHeight(
-                        target_h, Qt.SmoothTransformation)
-                image_label.setPixmap(pixmap)
-                image_label.setText("")
-        except Exception as e:
-            image_label.setText(f"[Could not load reference image]\n{e}")
+        # (Image loading removed to speed up the prompt)       
 
         form = QFormLayout()
         sid_edit = QLineEdit()
@@ -586,8 +556,7 @@ class RStudioExporter(object):
                 "Enter the folder where all subject DICOM archives live.\n\n"
                 "The wrapper will look for a subfolder named after the "
                 "subject ID inside this root on every export.\n\n"
-                "You can leave this blank and pick folders manually each time.",
-                text="")
+                "You can leave this blank and pick folders manually each time.")
             if ok and root.strip():
                 archive_root = root.strip()
                 if self._settings:
