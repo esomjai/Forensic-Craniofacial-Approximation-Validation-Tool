@@ -1,4 +1,4 @@
-# GUI for paper titled **Mandible morphological estimation: A reliability and population-specific study on a White American virtual sample** by Davies et al. 2026
+# GUI for paper titled "Mandible morphological estimation: A reliability and population-specific study on a White American virtual sample" by Davies et al. 2026
 
 DOI: 10.1016/j.forsciint.2026.113174
 
