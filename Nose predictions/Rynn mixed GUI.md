@@ -139,7 +139,7 @@ class ReportWindow(qt.QWidget):
         if not self.results:
             return "--- Calculation Report ---\nNo results available."
 
-        lines = ["Category\tID\tMeasurement\tValue\tUnit"]
+        lines = ["Category\tID\tMeasurement\tValue\tUnit\tStandard_ID"]
         for category, items in self.results.items():
             if category in exclude_categories:
                 continue
@@ -696,9 +696,13 @@ class RynnMethodLogic:
                 final_pos = pa_end_pos + direction * length
 
                 line_node = self.create_line("PV", pa_end_pos, final_pos, color=(0.2, 0.8, 0.2), use_run_number=True)
-                line_node.SetAttribute("Equation", eq_name)   # ← add this
+                line_node.SetAttribute("Equation", eq_name)
                 point_label = f"pronasale_{line_node.GetName()}"
                 pred_node.AddControlPoint(final_pos, point_label)
+                
+                # --- ADD THESE TWO LINES ---
+                idx = pred_node.GetNumberOfControlPoints() - 1
+                pred_node.SetNthControlPointDescription(idx, eq_name)
 
                 report_window.append_text(f"{line_node.GetName()}: {eq_name} = {eq_str} = {length:.2f} mm")
                 std_id = self.generate_standard_id("PV", line_node.GetName(), eq_name, length, "mm", equation=eq_name)
@@ -797,6 +801,11 @@ class RynnMethodLogic:
 
         final_label = f"subnasale_{self.run_number}"
         pred_node.AddControlPoint(intersections[0], final_label)
+        
+        # --- ADD THESE TWO LINES ---
+        idx = pred_node.GetNumberOfControlPoints() - 1
+        pred_node.SetNthControlPointDescription(idx, nd_equation)
+        
         report_window.append_text(f"Created: {final_label}")
 
     def calculate_nasion(self, nh_center_point_index, nh_equation, nl_center_point_index, nl_equation, active_profile_plane_name, report_window):
@@ -875,6 +884,11 @@ class RynnMethodLogic:
 
         label=f"nasion_{self.run_number}"
         pred_node.AddControlPoint(closest_pt, label)
+        
+        # --- ADD THESE TWO LINES ---
+        idx = pred_node.GetNumberOfControlPoints() - 1
+        pred_node.SetNthControlPointDescription(idx, f"NH:{nh_equation}|NL:{nl_equation}")
+        
         report_window.append_text(f"Created: {label}")
 
 # =============================================================================
