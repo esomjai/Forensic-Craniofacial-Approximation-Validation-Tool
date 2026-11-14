@@ -1,6 +1,10 @@
 This GUI uses a 4-point approach to relign the scan and create a Frankfort Horizontal Plane.
 
 
+https://github.com/user-attachments/assets/e6456d54-03bc-4411-b9da-8ea97d47caa3
+
+
+
 The next snippet adds an option to make nasion the origin of the RAS coordinate system - you have to allocate the nasion from another landmark file (usually in the landmark files for any method or manually adding it, but must be called "n" or "nasion"); after the FHP realignment is hardened. It is important to save your work at this point without doing ANYTHING in the Markups - it freezes the allocation and closes SLicer completely, for unknown reasons. Save your work, close Slicer, then proceed with the method you chose. 
 
 
