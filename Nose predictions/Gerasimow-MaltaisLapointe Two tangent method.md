@@ -1,4 +1,4 @@
-# The Two Tangent Method by Gerasimov, 1955[^2], its revision by Maltais-Lapointe (2016)[^14] based on Ullrich and Stephan (2011)[^7]
+[Gerasimov_landmarks.mrk.json](https://github.com/user-attachments/files/34860620/Gerasimov_landmarks.mrk.json)# The Two Tangent Method by Gerasimov, 1955[^2], its revision by Maltais-Lapointe (2016)[^14] based on Ullrich and Stephan (2011)[^7]
 # Table of Contents
 
 1.  [Literature context](#literature-context)
@@ -47,7 +47,9 @@ The method followed here will split into two: the first will be called  **Gerasi
 | 5                | 6                | pronasale    | pronasale     | The most anteriorly protruded point of the apex nasi. In the case of a bifid nose, the more protruding tip is chosen           | Caple and Stephan 2016[^11]|
 | 6                | 7                | Reference point 2    | R2     |The point where the T4 crosses the surface of the nasal soft tissue on the midsagittal plane      | Maltais Lapointe 2016[^14]|
 
-[Gerasimov_landmarks.mrk.json](https://github.com/user-attachments/files/28797197/Gerasimov_landmarks.mrk.json)
+[Gerasimov_landmarks.mrk.json](https://github.com/user-attachments/files/34860642/Gerasimov_landmarks.mrk.json)
+
+
 
 
 > [!WARNING]
