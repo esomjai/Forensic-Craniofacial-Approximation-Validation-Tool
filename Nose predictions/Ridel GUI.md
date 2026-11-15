@@ -449,7 +449,7 @@ class RidelGUI:
         # already contains Pred_* nodes).
         measurements = {}
         for _name in ("Nasal height", "Nasal width",
-                      "Nasal bone length", "Nasal bone projection"):
+                    "Nasal bone length", "Nasal bone projection"):
             _node = slicer.mrmlScene.GetFirstNodeByName(_name)
             if _node and isinstance(_node, slicer.vtkMRMLMarkupsLineNode):
                 try:
@@ -458,6 +458,21 @@ class RidelGUI:
                     measurements[_name] = None
             else:
                 measurements[_name] = None
+
+        # ---- Nasion reference frame ----
+        # Absolute RAS coordinates returned by GetNthControlPointPosition are
+        # scanner-dependent and clinically meaningless across cases. Reporting
+        # XYZ relative to nasion puts every row in the anatomical frame that
+        # the regression equations are built around, and makes the numbers
+        # comparable between patients.
+        have_nasion = hard_ht and hard_ht.GetNumberOfControlPoints() >= 1
+        if have_nasion:
+            hard_ht.GetNthControlPointPosition(0, nasion_ref)
+        else:
+            nasion_ref = np.zeros(3)
+
+        # Later when building headers:
+        ref_suffix = "(vs nasion)" if have_nasion else "(absolute RAS)"
 
         self.detailedWidget = qt.QDialog(self.main_widget)
         self.detailedWidget.setWindowTitle("Detailed Prediction Results")
@@ -531,8 +546,9 @@ class RidelGUI:
             "nTr Calc: HT Measurements", "nTr Calc: Equation", "nTr Calc: Value (mm)",
             "nCor Calc: HT Measurements", "nCor Calc: Equation", "nCor Calc: Value (mm)",
             "Ancestry in Equation",
-            "Predicted X (mm)", "Predicted Y (mm)", "Predicted Z (mm)",
-            "True X (mm)", "True Y (mm)", "True Z (mm)",
+            "Predicted X (vs nasion)", "Predicted Y (vs nasion)", "Predicted Z (vs nasion)",
+            "True X (vs nasion)", "True Y (vs nasion)", "True Z (vs nasion)",
+            "ΔX (mm)", "ΔY (mm)", "ΔZ (mm)",
             "Final Error (mm)"
         ]
         # Column index constants (keeps row-writing readable and less error-prone)
@@ -552,7 +568,10 @@ class RidelGUI:
         COL_TRUE_X         = 13
         COL_TRUE_Y         = 14
         COL_TRUE_Z         = 15
-        COL_ERROR          = 16
+        COL_DX             = 16
+        COL_DY             = 17
+        COL_DZ             = 18
+        COL_ERROR          = 19
 
         table.setColumnCount(len(headers))
         table.setHorizontalHeaderLabels(headers)
@@ -584,7 +603,7 @@ class RidelGUI:
 
                 original_lm, ancestry, ntr_breakdown, ncor_breakdown = \
                     self.get_calculation_breakdown(pred_label, all_equations,
-                                                   measurements)
+                                                measurements)
 
                 table.setItem(current_row, COL_ORIG_LM,   qt.QTableWidgetItem(original_lm))
                 table.setItem(current_row, COL_NTR_VARS,  qt.QTableWidgetItem(ntr_breakdown['vars']))
@@ -595,31 +614,50 @@ class RidelGUI:
                 table.setItem(current_row, COL_NCOR_VAL,  qt.QTableWidgetItem(ncor_breakdown['val']))
                 table.setItem(current_row, COL_ANCESTRY,  qt.QTableWidgetItem(ancestry))
 
-                # ---- Predicted XYZ ----
-                table.setItem(current_row, COL_PRED_X, qt.QTableWidgetItem(f"{pred_pos[0]:.2f}"))
-                table.setItem(current_row, COL_PRED_Y, qt.QTableWidgetItem(f"{pred_pos[1]:.2f}"))
-                table.setItem(current_row, COL_PRED_Z, qt.QTableWidgetItem(f"{pred_pos[2]:.2f}"))
+                # ---- Predicted XYZ, expressed relative to nasion ----
+                pred_rel = pred_pos - nasion_ref
+                table.setItem(current_row, COL_PRED_X, qt.QTableWidgetItem(f"{pred_rel[0]:.2f}"))
+                table.setItem(current_row, COL_PRED_Y, qt.QTableWidgetItem(f"{pred_rel[1]:.2f}"))
+                table.setItem(current_row, COL_PRED_Z, qt.QTableWidgetItem(f"{pred_rel[2]:.2f}"))
 
-                # ---- True XYZ (and error) ----
+                # ---- True XYZ (nasion-relative), per-axis deltas, and 3D error ----
                 base_lm_prefix = pred_label.split('_')[0] + '_'
                 is_alare = base_lm_prefix.startswith("Al")
 
                 if base_lm_prefix in true_dict:
                     true_pos = true_dict[base_lm_prefix]
-                    table.setItem(current_row, COL_TRUE_X, qt.QTableWidgetItem(f"{true_pos[0]:.2f}"))
-                    table.setItem(current_row, COL_TRUE_Y, qt.QTableWidgetItem(f"{true_pos[1]:.2f}"))
-                    table.setItem(current_row, COL_TRUE_Z, qt.QTableWidgetItem(f"{true_pos[2]:.2f}"))
+                    true_rel = true_pos - nasion_ref
 
-                    error = np.linalg.norm(pred_pos - true_pos)
+                    table.setItem(current_row, COL_TRUE_X, qt.QTableWidgetItem(f"{true_rel[0]:.2f}"))
+                    table.setItem(current_row, COL_TRUE_Y, qt.QTableWidgetItem(f"{true_rel[1]:.2f}"))
+                    table.setItem(current_row, COL_TRUE_Z, qt.QTableWidgetItem(f"{true_rel[2]:.2f}"))
+
+                    # Deltas are frame-independent (pred - true), so they can be
+                    # computed in absolute RAS or nasion-relative coordinates —
+                    # both give the same numbers.
+                    delta = pred_pos - true_pos
+                    table.setItem(current_row, COL_DX, qt.QTableWidgetItem(f"{delta[0]:+.2f}"))
+                    table.setItem(current_row, COL_DY, qt.QTableWidgetItem(f"{delta[1]:+.2f}"))
+                    table.setItem(current_row, COL_DZ, qt.QTableWidgetItem(f"{delta[2]:+.2f}"))
+
+                    error = float(np.linalg.norm(delta))
                     if is_alare:
-                        # Ridel caveat: mark with warning glyph
+                        # Ridel caveat: mark with warning glyph and tint the
+                        # whole error block (deltas + 3D) since all four are
+                        # derived from the same caveated Alare prediction.
+                        tint = qt.QColor(255, 235, 200)
                         cell = qt.QTableWidgetItem(f"{error:.2f} ⚠")
-                        cell.setBackground(qt.QColor(255, 235, 200))
+                        cell.setBackground(tint)
                         table.setItem(current_row, COL_ERROR, cell)
+                        for c in (COL_DX, COL_DY, COL_DZ):
+                            it = table.item(current_row, c)
+                            if it:
+                                it.setBackground(tint)
                     else:
                         table.setItem(current_row, COL_ERROR, qt.QTableWidgetItem(f"{error:.2f}"))
                 else:
-                    for c in (COL_TRUE_X, COL_TRUE_Y, COL_TRUE_Z, COL_ERROR):
+                    for c in (COL_TRUE_X, COL_TRUE_Y, COL_TRUE_Z,
+                            COL_DX, COL_DY, COL_DZ, COL_ERROR):
                         table.setItem(current_row, c, qt.QTableWidgetItem("N/A"))
 
                 # Tint the "Original Landmark" cell for Al rows too
@@ -652,8 +690,7 @@ class RidelGUI:
         copy_button = qt.QPushButton("Copy Tables to Clipboard")
         copy_button.clicked.connect(lambda: self.onCopyToClipboard(table, meas_table))
         layout.addWidget(copy_button)
-        self.detailedWidget.show() 
-
+        self.detailedWidget.show()   
     # --- Parsing ---
     def get_calculation_breakdown(self, label, all_equations, measurements):
         parts = label.split('_')
