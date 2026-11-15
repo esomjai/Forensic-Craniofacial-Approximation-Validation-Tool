@@ -465,13 +465,12 @@ class RidelGUI:
         # XYZ relative to nasion puts every row in the anatomical frame that
         # the regression equations are built around, and makes the numbers
         # comparable between patients.
-        have_nasion = hard_ht and hard_ht.GetNumberOfControlPoints() >= 1
+        nasion_ref = np.zeros(3)
+        hard_ht = slicer.mrmlScene.GetFirstNodeByName("Ridel_hard_tissue")
+        have_nasion = (hard_ht is not None and
+                       hard_ht.GetNumberOfControlPoints() >= 1)
         if have_nasion:
             hard_ht.GetNthControlPointPosition(0, nasion_ref)
-        else:
-            nasion_ref = np.zeros(3)
-
-        # Later when building headers:
         ref_suffix = "(vs nasion)" if have_nasion else "(absolute RAS)"
 
         self.detailedWidget = qt.QDialog(self.main_widget)
@@ -546,7 +545,8 @@ class RidelGUI:
             "nTr Calc: HT Measurements", "nTr Calc: Equation", "nTr Calc: Value (mm)",
             "nCor Calc: HT Measurements", "nCor Calc: Equation", "nCor Calc: Value (mm)",
             "Ancestry in Equation",
-            "Predicted X (vs nasion)", "Predicted Y (vs nasion)", "Predicted Z (vs nasion)",
+            f"Predicted X {ref_suffix}", f"Predicted Y {ref_suffix}", f"Predicted Z {ref_suffix}",
+            f"True X {ref_suffix}", f"True Y {ref_suffix}", f"True Z {ref_suffix}",
             "True X (vs nasion)", "True Y (vs nasion)", "True Z (vs nasion)",
             "ΔX (mm)", "ΔY (mm)", "ΔZ (mm)",
             "Final Error (mm)"
