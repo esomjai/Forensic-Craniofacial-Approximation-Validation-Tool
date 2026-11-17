@@ -112,6 +112,8 @@ class ThitiorulGUI:
             self.applyTransformButton.setStyleSheet("background-color: #FF9800; color: white; font-weight: bold; padding: 8px;")
 
     def populateAllSteps(self, buttonWidth):
+        # ---- Create all Group Boxes (Order matters for UI) ----
+        self.step0GroupBox = self.createStepGroupBox("Step 0: FHP Realignment (Crucial)", self.topLayout)
         self.step1GroupBox = self.createStepGroupBox("Step 1: Load and Position Landmarks", self.topLayout)
         self.step2GroupBox = self.createStepGroupBox("Step 2: Apply Coordinate Transform", self.topLayout)
         self.step3GroupBox = self.createStepGroupBox("Step 3: Create Reference Planes", self.topLayout)
@@ -119,21 +121,39 @@ class ThitiorulGUI:
         self.step5GroupBox = self.createStepGroupBox("Step 5: Calculate Errors", self.topLayout)
         self.step6GroupBox = self.createStepGroupBox("Step 6: View and Export Results", self.topLayout)
 
+        # ---- Step 0 ----
+        step0Layout = self.step0GroupBox.layout()
+        step0InfoLabel = qt.QLabel(
+            "<b>Level the head before placing landmarks:</b><br>"
+            "The Frankfort Horizontal Plane (FHP) must be aligned with the X-Y plane. "
+            "This prevents tilted CT scans from ruining your prediction accuracy.<br><br>"
+            "<i>Note: This tool applies rotation only. Translation (moving Nasion to origin) is handled automatically in Step 2.</i>"
+        )
+
+        step0InfoLabel.setWordWrap(True)
+        step0Layout.addWidget(step0InfoLabel)
+
+        self.runFHPButton = qt.QPushButton("Launch FHP Realignment Tool")
+        self.runFHPButton.setStyleSheet("background-color: #9C27B0; color: white; font-weight: bold; padding: 8px;")
+        self.runFHPButton.setFixedWidth(buttonWidth)
+        self.runFHPButton.clicked.connect(self.onRunFHP)  # <--- This triggers the embedded code
+        step0Layout.addWidget(self.runFHPButton, 0, qt.Qt.AlignHCenter)
+
         # ---- Step 1 ----
         step1InfoLabel = qt.QLabel(
             "<b>Recommended Workflow:</b><br><br>"
-            "1. Download and load <b>hard tissue</b> landmarks<br>"
-            "2. Click 'Create Hard Guide Lines' to help positioning<br>"
-            "3. Manually adjust hard tissue landmarks to match your scan<br>"
-            "4. Download and load <b>soft tissue</b> landmarks<br>"
-            "5. Click 'Create Soft Guide Lines' to help positioning<br>"
-            "6. Manually adjust soft tissue landmarks to match your scan<br>"
-            "7. When satisfied, proceed to Step 2<br><br>"
-            "<b>Tip:</b> Pay special attention to nasion 'n' - it will become the origin!<br><br>"
-            "<b>Important:</b> Step 2 automatically transforms all loaded landmarks. "
-            "If you load the soft tissue template after Step 2, it will be transformed automatically."
+            "1. Ensure the head is level (see Step 0)<br>"
+            "2. Download and load <b>hard tissue</b> landmarks<br>"
+            "3. Click 'Create Hard Guide Lines' to help positioning<br>"
+            "4. Manually adjust hard tissue landmarks to match your scan<br>"
+            "5. Download and load <b>soft tissue</b> landmarks<br>"
+            "6. Click 'Create Soft Guide Lines' to help positioning<br>"
+            "7. Manually adjust soft tissue landmarks to match your scan<br>"
+            "8. When satisfied, proceed to Step 2 (which moves Nasion to 0,0,0)<br><br>"
+            "<b>Tip:</b> Pay special attention to nasion 'n' - it will become the origin!"
         )
         step1InfoLabel.setWordWrap(True)
+        step1Layout = self.step1GroupBox.layout()
         step1Layout.addWidget(step1InfoLabel)
 
         # Hard tissue
@@ -529,6 +549,197 @@ class ThitiorulGUI:
             return None
 
     # -------------------- Button Callbacks --------------------
+    def onRunFHP(self):
+        """Launches the embedded FHP Realignment tool (rotation only, no visualization plane)."""
+        import numpy as np
+        import os
+        import urllib.request
+
+        # Close old FHP widget if it's already open
+        global fhp_widget
+        try:
+            fhp_widget.close()
+        except:
+            pass
+
+        fhp_widget = qt.QWidget()
+        fhp_widget.setWindowTitle("4-Point FHP Realign Tool")
+        panelLayout = qt.QVBoxLayout(fhp_widget)
+        formLayout = qt.QFormLayout()
+        panelLayout.addLayout(formLayout)
+
+        inputVolumeSelector = slicer.qMRMLNodeComboBox()
+        inputVolumeSelector.nodeTypes = ["vtkMRMLScalarVolumeNode"]
+        inputVolumeSelector.setMRMLScene(slicer.mrmlScene)
+        formLayout.addRow("Input Volume: ", inputVolumeSelector)
+
+        inputFiducialsSelector = slicer.qMRMLNodeComboBox()
+        inputFiducialsSelector.nodeTypes = ["vtkMRMLMarkupsFiducialNode"]
+        inputFiducialsSelector.setMRMLScene(slicer.mrmlScene)
+        formLayout.addRow("FHP Landmarks (poR, poL, orR, orL):", inputFiducialsSelector)
+
+        instructionLabel = qt.QLabel("Please place all four landmarks (poR, poL, orR, orL) before proceeding.")
+        instructionLabel.setWordWrap(True)
+        panelLayout.addWidget(instructionLabel)
+
+        applyButton = qt.QPushButton("Apply 4-Point FHP Realignment")
+        applyButton.enabled = False
+        panelLayout.addWidget(applyButton)
+
+        undoButton = qt.QPushButton("Undo Realignment")
+        undoButton.enabled = False
+        panelLayout.addWidget(undoButton)
+        panelLayout.addStretch(1)
+
+        fhp_state = {'originalTransformNode': None, 'fhpTransformRoot': None, 'originalFiducialTransform': None}
+
+        def onSelect():
+            fiducialNode = inputFiducialsSelector.currentNode()
+            if fiducialNode:
+                labels = [fiducialNode.GetNthControlPointLabel(i) for i in range(fiducialNode.GetNumberOfControlPoints())]
+                hasAllPoints = all(label in labels for label in ['poR', 'poL', 'orR', 'orL'])
+                applyButton.enabled = bool(inputVolumeSelector.currentNode() and hasAllPoints)
+            else:
+                applyButton.enabled = False
+            undoButton.enabled = bool(fhp_state['fhpTransformRoot'])
+
+        def compute_fhp_transform(poR, poL, orR, orL):
+            pts = np.vstack([poR, poL, orR, orL])
+            centroid = np.mean(pts, axis=0)
+            centered = pts - centroid
+            U, S, Vt = np.linalg.svd(centered)
+            normal = Vt[2]
+            if normal[2] < 0: normal = -normal
+            lr = poR - poL
+            lr = lr / np.linalg.norm(lr)
+            anterior = np.cross(normal, lr)
+            anterior = anterior / np.linalg.norm(anterior)
+            normal = np.cross(lr, anterior)
+            normal = normal / np.linalg.norm(normal)
+            rot_matrix = vtk.vtkMatrix4x4()
+            for i in range(3):
+                rot_matrix.SetElement(i, 0, lr[i])
+                rot_matrix.SetElement(i, 1, anterior[i])
+                rot_matrix.SetElement(i, 2, normal[i])
+            rot_matrix.SetElement(3, 3, 1.0)
+            rot_matrix_inv = vtk.vtkMatrix4x4()
+            rot_matrix_inv.DeepCopy(rot_matrix)
+            rot_matrix_inv.Invert()
+            return rot_matrix_inv
+
+        def onRealignButton():
+            inputVolume = inputVolumeSelector.currentNode()
+            fiducials = inputFiducialsSelector.currentNode()
+            if not inputVolume or not fiducials: return
+
+            if not fhp_state['originalTransformNode']:
+                existingTransformID = inputVolume.GetTransformNodeID()
+                if existingTransformID:
+                    fhp_state['originalTransformNode'] = slicer.mrmlScene.GetNodeByID(existingTransformID)
+                else:
+                    identityMatrix = vtk.vtkMatrix4x4()
+                    fhp_state['originalTransformNode'] = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLinearTransformNode", "Original_Position_Backup")
+                    fhp_state['originalTransformNode'].SetMatrixTransformToParent(identityMatrix)
+
+            fhp_state['originalFiducialTransform'] = fiducials.GetTransformNodeID()
+
+            landmarks = {}
+            for i in range(fiducials.GetNumberOfControlPoints()):
+                label = fiducials.GetNthControlPointLabel(i)
+                pos = [0,0,0]
+                fiducials.GetNthControlPointPositionWorld(i, pos)
+                landmarks[label] = np.array(pos)
+
+            required = ['poR', 'poL', 'orR', 'orL']
+            for req in required:
+                if req not in landmarks:
+                    slicer.util.errorDisplay(f"Missing landmark: {req}")
+                    return
+
+            poR, poL, orR, orL = landmarks['poR'], landmarks['poL'], landmarks['orR'], landmarks['orL']
+            rot_matrix = compute_fhp_transform(poR, poL, orR, orL)
+
+            transformNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLLinearTransformNode', 'FHP_Rotation')
+            transformNode.SetMatrixTransformToParent(rot_matrix)
+            inputVolume.SetAndObserveTransformNodeID(transformNode.GetID())
+            fiducials.SetAndObserveTransformNodeID(transformNode.GetID())
+
+            finalMatrix = vtk.vtkMatrix4x4()
+            transformNode.GetMatrixTransformToParent(finalMatrix)
+            
+            def apply_matrix(pt):
+                h = [pt[0], pt[1], pt[2], 1.0]
+                return np.array(finalMatrix.MultiplyPoint(h)[:3])
+
+            poR_rot, poL_rot, orR_rot, orL_rot = apply_matrix(poR), apply_matrix(poL), apply_matrix(orR), apply_matrix(orL)
+            fhp_state['fhpTransformRoot'] = transformNode
+
+            fiducials.SetAndObserveTransformNodeID(None)
+            for i in range(fiducials.GetNumberOfControlPoints()):
+                label = fiducials.GetNthControlPointLabel(i)
+                if label == 'poR': fiducials.SetNthControlPointPositionWorld(i, poR_rot)
+                elif label == 'poL': fiducials.SetNthControlPointPositionWorld(i, poL_rot)
+                elif label == 'orR': fiducials.SetNthControlPointPositionWorld(i, orR_rot)
+                elif label == 'orL': fiducials.SetNthControlPointPositionWorld(i, orL_rot)
+
+            slicer.vtkSlicerTransformLogic().hardenTransform(inputVolume)
+            undoButton.enabled = True
+            applyButton.enabled = False
+            
+            # Simple success message, no plane prompt
+            slicer.util.infoDisplay("4-point FHP realignment complete!\nThe head is now level. You can proceed to Step 1 to place your landmarks.")
+
+        def onUndoButton():
+            inputVolume = inputVolumeSelector.currentNode()
+            fiducials = inputFiducialsSelector.currentNode()
+            if not inputVolume: return
+
+            if fhp_state['originalTransformNode']:
+                inputVolume.SetAndObserveTransformNodeID(fhp_state['originalTransformNode'].GetID())
+            else:
+                inputVolume.SetAndObserveTransformNodeID(None)
+
+            if fhp_state['originalFiducialTransform']:
+                fiducials.SetAndObserveTransformNodeID(fhp_state['originalFiducialTransform'])
+            else:
+                fiducials.SetAndObserveTransformNodeID(None)
+
+            if fhp_state['fhpTransformRoot']:
+                slicer.mrmlScene.RemoveNode(fhp_state['fhpTransformRoot'])
+                fhp_state['fhpTransformRoot'] = None
+
+            undoButton.enabled = False
+            applyButton.enabled = True
+            slicer.util.infoDisplay("Realignment undone.")
+
+        def autoLoadLandmarks():
+            existing = slicer.mrmlScene.GetFirstNodeByName("FHP_4Point_Landmarks")
+            if existing:
+                inputFiducialsSelector.setCurrentNode(existing)
+                return
+            url = "https://github.com/user-attachments/files/26278568/FHP4.mrk.json"
+            tempPath = os.path.join(slicer.app.temporaryPath, "FHP4.mrk.json")
+            try:
+                req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+                with urllib.request.urlopen(req, timeout=30) as response:
+                    with open(tempPath, 'wb') as f:
+                        f.write(response.read())
+                loadedNode = slicer.util.loadMarkups(tempPath)
+                if loadedNode:
+                    loadedNode.SetName("FHP_4Point_Landmarks")
+                    inputFiducialsSelector.setCurrentNode(loadedNode)
+            except Exception as e:
+                print(f"FHP Landmark download error: {e}")
+
+        applyButton.connect('clicked(bool)', onRealignButton)
+        undoButton.connect('clicked(bool)', onUndoButton)
+        inputVolumeSelector.connect("currentNodeChanged(vtkMRMLNode*)", onSelect)
+        inputFiducialsSelector.connect("currentNodeChanged(vtkMRMLNode*)", onSelect)
+
+        fhp_widget.show()
+        autoLoadLandmarks()
+        onSelect()
+
     def onDownloadHardLandmarksClicked(self):
         node = self.download_and_load_markup(
             "https://github.com/user-attachments/files/23696758/Thitiorul_hard_tissue.mrk.json",
