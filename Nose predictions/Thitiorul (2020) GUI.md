@@ -120,7 +120,6 @@ class ThitiorulGUI:
         self.step6GroupBox = self.createStepGroupBox("Step 6: View and Export Results", self.topLayout)
 
         # ---- Step 1 ----
-        step1Layout = self.step1GroupBox.layout()
         step1InfoLabel = qt.QLabel(
             "<b>Recommended Workflow:</b><br><br>"
             "1. Download and load <b>hard tissue</b> landmarks<br>"
@@ -130,7 +129,9 @@ class ThitiorulGUI:
             "5. Click 'Create Soft Guide Lines' to help positioning<br>"
             "6. Manually adjust soft tissue landmarks to match your scan<br>"
             "7. When satisfied, proceed to Step 2<br><br>"
-            "<b>Tip:</b> Pay special attention to nasion 'n' - it will become the origin!"
+            "<b>Tip:</b> Pay special attention to nasion 'n' - it will become the origin!<br><br>"
+            "<b>Important:</b> Step 2 automatically transforms all loaded landmarks. "
+            "If you load the soft tissue template after Step 2, it will be transformed automatically."
         )
         step1InfoLabel.setWordWrap(True)
         step1Layout.addWidget(step1InfoLabel)
@@ -213,9 +214,13 @@ class ThitiorulGUI:
         step2Layout.addWidget(self.applyTransformButton, 0, qt.Qt.AlignHCenter)
 
         # ---- NEW: Transform Soft Tissue Only ----
-        self.transformSoftButton = qt.QPushButton("Transform Soft Tissue Landmarks Now")
+        self.transformSoftButton = qt.QPushButton("Transform Soft Tissue Only (if placed AFTER Step 2)")
         self.transformSoftButton.setStyleSheet("background-color: #FFA500; color: white; padding: 8px;")
         self.transformSoftButton.setFixedWidth(buttonWidth)
+        self.transformSoftButton.setToolTip(
+            "Use this ONLY if you placed soft tissue landmarks in the original space AFTER applying Step 2.\n"
+            "If you allocated the soft tissue landmarks after Step 2, it was already transformed automatically."
+        )
         self.transformSoftButton.clicked.connect(self.transformSoftTissueNow)
         step2Layout.addWidget(self.transformSoftButton, 0, qt.Qt.AlignHCenter)
 
@@ -467,10 +472,29 @@ class ThitiorulGUI:
             slicer.util.warningDisplay("No soft tissue landmarks selected.")
             self.raiseMainWindow()
             return
-        # Check if already transformed
-        if soft.GetTransformNodeID() is not None:
-            # We'll harden it again to be safe
-            pass
+
+        # Safety check to prevent double-transformation
+        if self.transform_applied:
+            hard = self.hardTissueSelector.currentNode()
+            if hard and hard.GetNumberOfControlPoints() > 0 and soft.GetNumberOfControlPoints() > 0:
+                hard_centroid = np.mean([hard.GetNthControlPointPosition(i) for i in range(hard.GetNumberOfControlPoints())], axis=0)
+                soft_centroid = np.mean([soft.GetNthControlPointPosition(i) for i in range(soft.GetNumberOfControlPoints())], axis=0)
+                dist = np.linalg.norm(hard_centroid - soft_centroid)
+                
+                # If centroids are close (<300mm), they are likely in the same space already
+                if dist < 300:
+                    # confirmYesNoDisplay returns True for Yes, False for No
+                    override = slicer.util.confirmYesNoDisplay(
+                        "The soft tissue landmarks appear to already be in the transformed space "
+                        "(they are close to the hard tissue landmarks).\n\n"
+                        "Applying the transform again would move them out of bounds.\n\n"
+                        "Do you want to FORCE the transformation anyway?\n"
+                        "(Only click Yes if you are absolutely sure)"
+                    )
+                    if not override:
+                        self.raiseMainWindow()
+                        return
+
         soft.SetAndObserveTransformNodeID(self.transformNode.GetID())
         slicer.vtkSlicerTransformLogic().hardenTransform(soft)
         self.softTissueNode = soft
@@ -531,8 +555,10 @@ class ThitiorulGUI:
         if node:
             self.softTissueNode = node
             self.softTissueSelector.setCurrentNode(node)
-            self.show_popup("Soft Tissue Template Loaded",
-                           "Template loaded! Adjust landmarks and proceed.")
+            msg = "Template loaded! Adjust landmarks and proceed."
+            if self.transform_applied:
+                msg += "\n\nNote: The transform from Step 2 was automatically applied because it was already active."
+            self.show_popup("Soft Tissue Template Loaded", msg)
         self.raiseMainWindow()
 
     def create_line_by_name(self, name, node, label1, label2):
