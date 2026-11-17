@@ -60,28 +60,20 @@ DICOM_TAG_MAP = {
     "age":                          "PatientAge",
     "biological_sex_raw":           "PatientSex",
     "dicom_patient_id":             "PatientID",
+    "Stature_cm":                   "PatientSize",      # <--- ADDED
+    "Weight_kg":                    "PatientWeight",    # <--- ADDED
     # General equipment
     "scan_Manufacturer":            "Manufacturer",
     "scan_Model":                   "ManufacturerModelName",
     "scan_Software":                "SoftwareVersions",
     "scan_InstitutionName":         "InstitutionName",
     "scan_StationName":             "StationName",
-    "scan_InstitutionalDepartment": "InstitutionalDepartmentName",
-    # Study / series
-    "scan_StudyDescription":        "StudyDescription",
-    "scan_SeriesDescription":       "SeriesDescription",
-    "scan_ProtocolName":            "ProtocolName",
-    "scan_StudyDate":               "StudyDate",
-    "scan_StudyTime":               "StudyTime",
-    "scan_AcquisitionTime":         "AcquisitionTime",
-    "scan_Modality":                "Modality",
-    "scan_StudyID":                 "StudyID",
     # Image geometry
     "scan_SliceThickness":          "SliceThickness",
-    "scan_SpacingBetweenSlices":    "SpacingBetweenSlices",
+    "scan_PitchFactor":             "PitchFactor",      # <--- ADDED (Legacy pitch)
+    "scan_Collimation":             "Collimation",      # <--- ADDED (Legacy collimation)
     "scan_NumberofDetectorRows":    "Rows",
     "scan_NumberofDetectorColumns": "Columns",
-    "scan_PatientPosition":         "PatientPosition",
     # Acquisition
     "scan_PeakTubeVoltage_kVp":     "KVP",
     "scan_XRayTubeCurrent":         "XRayTubeCurrent",
@@ -114,6 +106,14 @@ MARKUP_CLASSES = [
     "vtkMRMLMarkupsFiducialNode",
 ]
 
+def _safe_text(text):
+    """Sanitize text to prevent encoding crashes in R/Excel."""
+    if not text:
+        return ""
+    # Convert to string just in case, replace Delta, remove line breaks
+    safe = str(text).replace("\u0394", "Delta").replace("\r", " ").replace("\n", " ")
+    # Ensure it can be encoded as UTF-8 without crashing
+    return safe.encode("ascii", "ignore").decode("ascii") if safe.isascii() else safe
 
 def _classify_role(node_name, landmark_labels=None):
     """Classify a markup node's role for validation analysis.
@@ -762,6 +762,15 @@ class RStudioExporter(object):
             else:
                 out["biological_sex"] = "Other"
 
+        # Convert PatientSize (meters) to cm
+                if "Stature_cm" in out:
+                    try:
+                        height_m = float(out["Stature_cm"])
+                        if height_m < 3.0: # If it's 1.75 instead of 175
+                            out["Stature_cm"] = f"{height_m * 100:.1f}"
+                    except ValueError:
+                        pass 
+
         # Slice count
         if slice_count > 0:
             out["scan_NumberofSlices"] = str(slice_count)
@@ -1047,6 +1056,14 @@ class RStudioExporter(object):
 
             node_role = _classify_role(node_name, labels)
 
+            # 1. Grab ALL custom attributes stored on this node
+            attributes = {}
+            try:
+                for attr_name in node.GetAttributeNames():
+                    attributes[attr_name] = node.GetAttribute(attr_name)
+            except Exception:
+                pass
+
             for i in range(n_points):
                 p = [0.0, 0.0, 0.0]
                 try:
@@ -1057,10 +1074,20 @@ class RStudioExporter(object):
                     description = node.GetNthControlPointDescription(i) or ""
                 except Exception:
                     description = ""
+
+                # 2. Combine the GUI description with the node attributes
+                full_definition = description
+                if attributes:
+                    # Formats as: "Description [Equation=WSA_Male, Sex=F]"
+                    attr_str = " | ".join([f"{k}={v}" for k, v in attributes.items()])
+                    full_definition = f"{full_definition} [{attr_str}]".strip()
+                    if not description:
+                        full_definition = attr_str
+
                 rows.append({
-                    "point_list": node_name,
-                    "landmark":   labels[i],
-                    "definition": description,
+                    "point_list": _safe_text(node_name),
+                    "landmark":   _safe_text(labels[i]),
+                    "definition": _safe_text(full_definition), # <--- UPDATED
                     "role":       node_role,
                     "R": p[0], "A": p[1], "S": p[2],
                 })
@@ -1293,6 +1320,19 @@ def install_export_button_for(gui,
 
         # ---- Write one CSV per run ----
         written = []
+                # --- UNIVERSAL GUI TABLE CAPTURE ---
+        gui_equations = {}
+        if hasattr(gui, "data") and "report_window" in gui.data:
+            report = gui.data["report_window"]
+            if hasattr(report, "results"):
+                for cat, items in report.results.items():
+                    for item in items:
+                        # Create a key that links the node name to the equation
+                        # Example: "EQ_PA_0_1" = "0.83*Y-3.5"
+                        node_id = item.get("id", "")
+                        eq_str = f"{item.get('measurement', '')} = {item.get('value', '')} {item.get('unit', '')}"
+                        gui_equations[f"EQ_{node_id}"] = eq_str
+        # -----------------------------------
         for variant_name, variant_meta in runs:
             # Filter landmarks for this run
             filtered = _collect_landmarks_for_variant(
@@ -1326,7 +1366,7 @@ def install_export_button_for(gui,
                     method=method,
                     subject_id=session["subject_id"],
                     session=session,
-                    extra_meta=extra,
+                    extra_meta=gui_equations,
                     variant=variant_name,
                     landmark_rows=filtered,
                 )
